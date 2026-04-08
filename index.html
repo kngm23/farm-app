@@ -141,7 +141,12 @@ textarea{resize:vertical;min-height:70px}
       </div>
       <div class="field">
         <label>作業者（複数選択可）</label>
-        <div class="member-grid" id="rec-member-grid"></div>
+        <div class="ms-wrap" id="ms-rec-wrap">
+          <div class="ms-trigger" id="ms-rec-trigger" onclick="toggleMs('rec')">
+            <span class="ms-hint" id="ms-rec-hint">タップして選択 ▼</span>
+          </div>
+          <div class="ms-dropdown" id="ms-rec-dropdown"></div>
+        </div>
       </div>
       <div class="field">
         <label>作業時間</label>
@@ -258,7 +263,12 @@ textarea{resize:vertical;min-height:70px}
     <div class="field"><label>作業日</label><input type="date" id="e-date"></div>
     <div class="field">
       <label>作業者（複数選択可）</label>
-      <div class="member-grid" id="edit-member-grid"></div>
+      <div class="ms-wrap" id="ms-edit-wrap">
+        <div class="ms-trigger" id="ms-edit-trigger" onclick="toggleMs('edit')">
+          <span class="ms-hint" id="ms-edit-hint">タップして選択 ▼</span>
+        </div>
+        <div class="ms-dropdown" id="ms-edit-dropdown"></div>
+      </div>
     </div>
     <div class="field row2">
       <div><label>開始</label><input type="time" id="e-start"></div>
@@ -328,39 +338,112 @@ function setStatus(msg, type) {
   b.textContent = msg; b.className = 'status-bar status-' + type; b.style.display = 'block';
 }
 
-// ---- メンバーチェックボックスグリッド ----
+// ---- マルチセレクト（ドロップダウン✓方式）----
 const CHECKMARK = `<svg viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,7 5,10 11,3"/></svg>`;
+const msSelected = { rec: [], edit: [] };
 
-function renderMemberGrid(containerId, selectedMembers) {
-  const el = document.getElementById(containerId);
+function buildMsDropdown(ns) {
+  const dd = document.getElementById('ms-' + ns + '-dropdown');
+  if (!dd) return;
   if (!state.members.length) {
-    el.innerHTML = '<p style="font-size:13px;color:var(--text-hint);padding:8px 0">メンバータブで登録してください</p>';
+    dd.innerHTML = '<div style="padding:14px;font-size:13px;color:var(--text-hint)">メンバータブで登録してください</div>';
     return;
   }
-  el.innerHTML = state.members.map(m => {
-    const on = selectedMembers.includes(m);
-    return `<div class="mem-check-item ${on ? 'on' : ''}" id="mci-${containerId}-${m.replace(/\s/g,'_')}" onclick="toggleMember('${containerId}','${m}')">
-      <div class="mem-check-label">
-        <div class="mem-chk-box">${CHECKMARK}</div>
-        <span class="mem-check-name">${m}</span>
-      </div>
+  dd.innerHTML = state.members.map(m => {
+    const on = msSelected[ns].includes(m);
+    const safe = m.replace(/'/g, "\\'");
+    return `<div class="ms-item ${on?'on':''}" id="msi-${ns}-${m.replace(/\s/g,'_')}" onclick="toggleMsItem('${ns}','${safe}')">
+      <div class="ms-chk">${CHECKMARK}</div>
+      <span class="ms-name">${m}</span>
     </div>`;
   }).join('');
 }
 
-function toggleMember(containerId, name) {
-  const id = 'mci-' + containerId + '-' + name.replace(/\s/g, '_');
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.toggle('on');
+function updateMsTrigger(ns) {
+  const trigger = document.getElementById('ms-' + ns + '-trigger');
+  const hint = document.getElementById('ms-' + ns + '-hint');
+  if (!trigger || !hint) return;
+  const sel = msSelected[ns];
+  // タグを削除してヒントだけ残す
+  [...trigger.querySelectorAll('.ms-tag')].forEach(e => e.remove());
+  if (sel.length === 0) {
+    hint.style.display = '';
+    hint.textContent = 'タップして選択 ▼';
+  } else {
+    hint.style.display = 'none';
+    sel.forEach(m => {
+      const tag = document.createElement('span');
+      tag.className = 'ms-tag';
+      tag.innerHTML = m + '<button class="ms-tag-x" onclick="event.stopPropagation();removeMsItem(\''+ns+'\',\''+m.replace(/'/g,"\\'")+'\')">&times;</button>';
+      trigger.insertBefore(tag, hint);
+    });
+    // 矢印
+    const arrow = document.createElement('span');
+    arrow.className = 'ms-arrow';
+    arrow.textContent = '▼';
+    trigger.appendChild(arrow);
+  }
 }
 
-function getSelectedMembers(containerId) {
-  return state.members.filter(m => {
-    const id = 'mci-' + containerId + '-' + m.replace(/\s/g, '_');
-    const el = document.getElementById(id);
-    return el && el.classList.contains('on');
+function toggleMs(ns) {
+  const dd = document.getElementById('ms-' + ns + '-dropdown');
+  const trigger = document.getElementById('ms-' + ns + '-trigger');
+  if (!dd) return;
+  const isOpen = dd.classList.contains('open');
+  // 全部閉じる
+  ['rec','edit'].forEach(n => {
+    document.getElementById('ms-' + n + '-dropdown')?.classList.remove('open');
+    document.getElementById('ms-' + n + '-trigger')?.classList.remove('open');
   });
+  if (!isOpen) {
+    buildMsDropdown(ns);
+    dd.classList.add('open');
+    trigger.classList.add('open');
+  }
+}
+
+function toggleMsItem(ns, name) {
+  const idx = msSelected[ns].indexOf(name);
+  if (idx >= 0) msSelected[ns].splice(idx, 1);
+  else msSelected[ns].push(name);
+  // アイテムのon/off更新
+  const el = document.getElementById('msi-' + ns + '-' + name.replace(/\s/g,'_'));
+  if (el) el.classList.toggle('on', msSelected[ns].includes(name));
+  updateMsTrigger(ns);
+}
+
+function removeMsItem(ns, name) {
+  const idx = msSelected[ns].indexOf(name);
+  if (idx >= 0) msSelected[ns].splice(idx, 1);
+  buildMsDropdown(ns);
+  updateMsTrigger(ns);
+}
+
+function initMs(ns, selectedMembers) {
+  msSelected[ns] = [...(selectedMembers || [])];
+  buildMsDropdown(ns);
+  updateMsTrigger(ns);
+}
+
+function getSelectedMembers(ns) {
+  return [...msSelected[ns]];
+}
+
+// ドロップダウン外クリックで閉じる
+document.addEventListener('click', function(e) {
+  ['rec','edit'].forEach(ns => {
+    const wrap = document.getElementById('ms-' + ns + '-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      document.getElementById('ms-' + ns + '-dropdown')?.classList.remove('open');
+      document.getElementById('ms-' + ns + '-trigger')?.classList.remove('open');
+    }
+  });
+});
+
+// 旧API互換 (renderMemberGrid → initMs)
+function renderMemberGrid(containerId, selectedMembers) {
+  const ns = containerId === 'rec-member-grid' ? 'rec' : 'edit';
+  initMs(ns, selectedMembers);
 }
 
 // ---- Navigation ----
@@ -373,7 +456,7 @@ function showPage(id, btn) {
   if (id === 'calendar') renderCalendar();
   if (id === 'stats') renderStats();
   if (id === 'members') renderMembers();
-  if (id === 'record') renderMemberGrid('rec-member-grid', []);
+  if (id === 'record') initMs('rec', []);
   if (id === 'settings') document.getElementById('gas-url').value = gasUrl;
 }
 
@@ -395,14 +478,14 @@ function addMember() {
   const inp = document.getElementById('new-mem'), n = inp.value.trim();
   if (!n) return;
   if (!state.members.includes(n)) { state.members.push(n); save(); }
-  inp.value = ''; renderMembers(); renderMemberGrid('rec-member-grid', []);
+  inp.value = ''; renderMembers(); initMs('rec', []);
   toast('メンバーを追加しました');
   if (gasUrl) pushMembersToCloud();
 }
 function deleteMember(name) {
   if (!confirm(`「${name}」を削除しますか？`)) return;
   state.members = state.members.filter(m => m !== name);
-  save(); renderMembers(); renderMemberGrid('rec-member-grid', []);
+  save(); renderMembers(); initMs('rec', []);
   if (gasUrl) pushMembersToCloud();
 }
 function renderMembers() {
@@ -425,7 +508,7 @@ function saveRecord() {
   const date = document.getElementById('rec-date').value;
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
-  const members = getSelectedMembers('rec-member-grid');
+  const members = getSelectedMembers('rec');
   if (!date) { toast('⚠️ 作業日を入力してください'); return; }
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
   const rec = {
@@ -443,7 +526,7 @@ function saveRecord() {
   document.getElementById('prog-num').textContent = '50%';
   document.getElementById('rec-start').value = '09:00';
   document.getElementById('rec-end').value = '15:00';
-  renderMemberGrid('rec-member-grid', []);
+  initMs('rec', []);
   toast('✅ 記録を保存しました');
   if (gasUrl) pushRecordToCloud(rec);
 }
@@ -501,7 +584,7 @@ function closeModal() { document.getElementById('edit-modal').classList.remove('
 function updateRecord() {
   const idx = state.records.findIndex(r => r.id === editId);
   if (idx < 0) return;
-  const members = getSelectedMembers('edit-member-grid');
+  const members = getSelectedMembers('edit');
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
   state.records[idx] = { ...state.records[idx], date: document.getElementById('e-date').value, start: document.getElementById('e-start').value, end: document.getElementById('e-end').value, category: document.getElementById('e-cat').value, detail: document.getElementById('e-detail').value, memo: document.getElementById('e-memo').value, progress: Number(document.getElementById('e-prog').value), members };
   save(); closeModal(); renderLog(); toast('✅ 更新しました');
@@ -593,7 +676,7 @@ async function syncAll() {
     if(cur==='calendar')renderCalendar();
     if(cur==='stats')renderStats();
     if(cur==='members')renderMembers();
-    if(cur==='record')renderMemberGrid('rec-member-grid',[]);
+    if(cur==='record')initMs('rec',[]);
   } catch(e){toast('⚠️ 同期に失敗しました');setStatus('接続エラー','err');}
   fab.classList.remove('syncing');setTimeout(()=>setStatus('',''),4000);
 }
@@ -608,7 +691,7 @@ function clearLocal(){if(!confirm('ローカルデータを全削除しますか
 
 // ---- Init ----
 document.getElementById('rec-date').value=new Date().toISOString().slice(0,10);
-renderMemberGrid('rec-member-grid',[]);
+initMs('rec',[]);
 if(gasUrl)syncAll();
 </script>
 </body>
