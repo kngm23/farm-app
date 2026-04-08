@@ -507,7 +507,10 @@ function updateRecord() {
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
   state.records[idx] = { ...state.records[idx], date: document.getElementById('e-date').value, start: document.getElementById('e-start').value, end: document.getElementById('e-end').value, category: document.getElementById('e-cat').value, detail: document.getElementById('e-detail').value, memo: document.getElementById('e-memo').value, progress: Number(document.getElementById('e-prog').value), members };
   save(); closeModal(); renderLog(); toast('✅ 更新しました');
-  if (gasUrl) syncAll();
+  if (gasUrl) pushUpdateToCloud(state.records[idx]);
+}
+async function pushUpdateToCloud(rec) {
+  try { await gasGet({action:'update', data:JSON.stringify(rec)}); } catch(e) {}
 }
 function deleteById(id) {
   if (!confirm('この記録を削除しますか？')) return;
@@ -517,7 +520,8 @@ function deleteById(id) {
 }
 function deleteRecord() {
   if (!confirm('この記録を削除しますか？')) return;
-  state.records = state.records.filter(r => r.id !== editId);
+  const id = editId;
+  state.records = state.records.filter(r => r.id !== id);
   save(); closeModal(); renderLog(); toast('削除しました');
   if (gasUrl) syncAll();
 }
