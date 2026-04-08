@@ -210,7 +210,7 @@ textarea{resize:vertical;min-height:70px}
   <div id="page-stats" class="page">
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-label">総作業日数</div><div class="stat-val" id="st-days">0</div></div>
-      <div class="stat-box"><div class="stat-label" id="st-hours-label">1人あたり平均</div><div class="stat-val" id="st-hours">0h</div></div>
+      <div class="stat-box"><div class="stat-label" id="st-hours-label">1人あたり平均稼働時間</div><div class="stat-val" id="st-hours">0h</div></div>
     </div>
     <div class="card"><div class="section-label">メンバー別 稼働時間</div><div id="stats-mem"></div></div>
     <div class="card"><div class="section-label">カテゴリ別 作業時間</div><div id="stats-cat"></div></div>
@@ -527,7 +527,7 @@ function renderLog() {
 
 // ---- Edit ----
 function openEdit(id) {
-  const r = state.records.find(r => r.id === id);
+  const r = state.records.find(r => String(r.id) === String(id));
   if (!r) return;
   editId = id;
   document.getElementById('e-date').value = r.date;
@@ -543,17 +543,28 @@ function openEdit(id) {
 }
 function closeModal() { document.getElementById('edit-modal').classList.remove('open'); editId = null; }
 function updateRecord() {
-  const idx = state.records.findIndex(r => r.id === editId);
+  const idx = state.records.findIndex(r => String(r.id) === String(editId));
   if (idx < 0) return;
   const members = getSelectedMembers('edit-member-grid');
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
-  state.records[idx] = { ...state.records[idx], date: document.getElementById('e-date').value, start: document.getElementById('e-start').value, end: document.getElementById('e-end').value, category: document.getElementById('e-cat').value, detail: document.getElementById('e-detail').value, memo: document.getElementById('e-memo').value, progress: Number(document.getElementById('e-prog').value), members };
+  const updated = {
+    ...state.records[idx],
+    date: document.getElementById('e-date').value,
+    start: document.getElementById('e-start').value,
+    end: document.getElementById('e-end').value,
+    category: document.getElementById('e-cat').value,
+    detail: document.getElementById('e-detail').value,
+    memo: document.getElementById('e-memo').value,
+    progress: Number(document.getElementById('e-prog').value),
+    members
+  };
+  closeModal();
   if (gasUrl) {
-    closeModal();
     toast('⏳ 更新中...');
-    pushUpdateToCloud(state.records[idx]);
+    pushUpdateToCloud(updated);
   } else {
-    save(); closeModal(); renderLog(); toast('✅ 更新しました');
+    state.records[idx] = updated;
+    save(); renderLog(); toast('✅ 更新しました');
   }
 }
 
@@ -618,12 +629,12 @@ function renderStats() {
   // 総稼働時間（全員の合計）
   let totalAll = 0;
   state.records.forEach(r => { const h=calcH(r.start,r.end), cnt=memArr(r).length; if(cnt>0) totalAll+=h*cnt; });
-  // 1人あたり平均 = 総時間 ÷ 作業に参加したユニークメンバー数
+  // 1人あたり平均稼働時間 = 総時間 ÷ 作業に参加したユニークメンバー数
   const activeMembers = new Set(state.records.flatMap(r=>memArr(r)));
   const avgHours = activeMembers.size > 0 ? totalAll / activeMembers.size : 0;
   document.getElementById('st-days').textContent = days;
   document.getElementById('st-hours').textContent = fmtH(avgHours);
-  document.getElementById('st-hours-label').textContent = '1人あたり平均';
+  document.getElementById('st-hours-label').textContent = '1人あたり平均稼働時間';
 
   // メンバー別稼働時間（各自の合計）
   const mh={};
@@ -632,7 +643,7 @@ function renderStats() {
   const maxM=Math.max(1,...Object.values(mh).filter(v=>!isNaN(v)));
   document.getElementById('stats-mem').innerHTML=Object.entries(mh).sort((a,b)=>b[1]-a[1]).map(([n,h])=>`<div class="bar-row"><div class="bar-row-top"><span class="bar-name">${n}</span><span class="bar-hrs">${fmtH(h)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(h/maxM*100)}%"></div></div></div>`).join('')||'<p style="color:var(--text-hint);font-size:14px">データがありません</p>';
 
-  // カテゴリ別 1人あたり平均
+  // カテゴリ別 1人あたり平均稼働時間
   const ch={}, chCnt={};
   state.records.forEach(r=>{
     const h=calcH(r.start,r.end);
