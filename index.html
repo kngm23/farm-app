@@ -2,156 +2,115 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>農作業管理</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --green: #2D6A4F;
-  --green-light: #52B788;
-  --green-pale: #D8F3DC;
-  --red: #E76F51;
-  --bg: #F8FAF8;
-  --surface: #ffffff;
-  --border: #D1E8D4;
-  --text: #1B3A2D;
-  --text-sub: #5A7F6A;
-  --text-hint: #9AB89F;
-  --radius: 12px;
-  --shadow: 0 2px 12px rgba(45,106,79,0.08);
-}
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+:root{--green:#2D6A4F;--green-light:#52B788;--green-pale:#D8F3DC;--red:#E76F51;--bg:#F8FAF8;--surface:#fff;--border:#D1E8D4;--text:#1B3A2D;--text-sub:#5A7F6A;--text-hint:#9AB89F;--radius:12px;--shadow:0 2px 12px rgba(45,106,79,.08)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.header{background:var(--green);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header h1{font-size:17px;font-weight:700}
+.header-actions{display:flex;gap:8px}
+.icon-btn{background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.nav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:99}
+.nav-btn{flex:1;padding:10px 2px 9px;font-size:11px;font-family:inherit;background:none;border:none;cursor:pointer;color:var(--text-sub);border-bottom:2.5px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px;transition:all .15s}
+.nav-btn .icon{font-size:17px}
+.nav-btn.active{color:var(--green);border-bottom-color:var(--green);font-weight:500}
+.page{display:none;flex:1;padding:14px}
+.page.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.section-label{font-size:11px;font-weight:700;color:var(--text-sub);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+.field{margin-bottom:14px}
+.field label{font-size:12px;color:var(--text-sub);display:block;margin-bottom:5px;font-weight:500}
+input[type=text],input[type=date],input[type=time],select,textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;transition:border-color .15s;-webkit-appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--green-light);background:#fff}
+textarea{resize:vertical;min-height:70px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-.header { background: var(--green); color: white; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-.header h1 { font-size: 17px; font-weight: 700; }
-.header-actions { display: flex; gap: 8px; }
-.icon-btn { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+/* チェックボックス式メンバー選択 */
+.member-grid{display:flex;flex-direction:column;gap:6px}
+.mem-check-item{display:flex;align-items:center;gap:0;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg);transition:all .15s;cursor:pointer;-webkit-user-select:none;user-select:none}
+.mem-check-item input[type=checkbox]{position:absolute;opacity:0;width:0;height:0}
+.mem-check-label{display:flex;align-items:center;gap:10px;padding:11px 14px;width:100%;cursor:pointer}
+.mem-chk-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;background:#fff}
+.mem-chk-box svg{display:none;width:13px;height:13px}
+.mem-check-item.on{border-color:var(--green);background:var(--green-pale)}
+.mem-check-item.on .mem-chk-box{background:var(--green);border-color:var(--green)}
+.mem-check-item.on .mem-chk-box svg{display:block}
+.mem-check-name{font-size:15px;color:var(--text);font-weight:500}
+.mem-check-item.on .mem-check-name{color:var(--green)}
 
-.nav { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 52px; z-index: 99; }
-.nav-btn { flex: 1; padding: 10px 2px 9px; font-size: 11px; font-family: inherit; background: none; border: none; cursor: pointer; color: var(--text-sub); border-bottom: 2.5px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: all 0.15s; }
-.nav-btn .icon { font-size: 17px; }
-.nav-btn.active { color: var(--green); border-bottom-color: var(--green); font-weight: 500; }
-
-.page { display: none; flex: 1; padding: 14px; }
-.page.active { display: block; }
-
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
-.section-label { font-size: 11px; font-weight: 700; color: var(--text-sub); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
-
-.field { margin-bottom: 14px; }
-.field label { font-size: 12px; color: var(--text-sub); display: block; margin-bottom: 5px; font-weight: 500; }
-input[type=text], input[type=date], input[type=time], select, textarea {
-  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
-  font-size: 15px; font-family: inherit; background: var(--bg); color: var(--text);
-  outline: none; transition: border-color 0.15s;
-}
-input:focus, select:focus, textarea:focus { border-color: var(--green-light); background: white; }
-textarea { resize: vertical; min-height: 70px; }
-.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-/* 作業者マルチセレクト */
-.multi-select-wrap { position: relative; }
-.multi-select-box { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; transition: border-color 0.15s; }
-.multi-select-box:focus-within { border-color: var(--green-light); background: white; }
-.multi-tag { background: var(--green-pale); color: var(--green); border-radius: 20px; padding: 3px 10px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
-.multi-tag button { background: none; border: none; color: var(--green); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
-.multi-placeholder { font-size: 14px; color: var(--text-hint); }
-.multi-dropdown { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 4px 20px rgba(45,106,79,0.12); z-index: 50; max-height: 220px; overflow-y: auto; }
-.multi-dropdown.open { display: block; }
-.multi-option { padding: 11px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); transition: background 0.1s; }
-.multi-option:last-child { border-bottom: none; }
-.multi-option:hover { background: var(--green-pale); }
-.multi-option.selected { background: var(--green-pale); color: var(--green); font-weight: 500; }
-.multi-option .chk { width: 18px; height: 18px; border: 1.5px solid var(--border); border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.multi-option.selected .chk { background: var(--green); border-color: var(--green); color: white; font-size: 11px; }
-
-.progress-row { display: flex; align-items: center; gap: 10px; }
-.progress-row input[type=range] { flex: 1; accent-color: var(--green); }
-.prog-val { font-size: 16px; font-weight: 700; color: var(--green); min-width: 44px; text-align: right; }
-
-.btn { padding: 12px; border-radius: 8px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; border: none; transition: all 0.15s; width: 100%; }
-.btn:active { transform: scale(0.97); }
-.btn-primary { background: var(--green); color: white; }
-.btn-secondary { background: var(--green-pale); color: var(--green); }
-.btn-danger { background: #FEE2E2; color: var(--red); }
-.btn-sm { padding: 7px 13px; font-size: 13px; width: auto; border-radius: 7px; }
-
-.log-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px; margin-bottom: 9px; box-shadow: var(--shadow); }
-.log-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-.log-date { font-size: 12px; color: var(--text-sub); }
-.log-cat { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
-.log-detail { font-size: 13px; color: var(--text-sub); margin-bottom: 6px; white-space: pre-wrap; }
-.log-meta { font-size: 12px; color: var(--text-hint); }
-.pbar { height: 5px; background: var(--border); border-radius: 3px; margin-top: 8px; overflow: hidden; }
-.pbar-fill { height: 100%; background: var(--green-light); border-radius: 3px; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-.badge-done { background: var(--green-pale); color: var(--green); }
-.badge-mid { background: #FEF9C3; color: #92400E; }
-.badge-low { background: #F1F5F9; color: var(--text-sub); }
-.log-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.log-actions button { flex: 1; }
-
-.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; }
-.filter-bar select { flex: 1; font-size: 13px; padding: 8px 10px; }
-
-.cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.cal-nav button { background: var(--green-pale); border: none; color: var(--green); border-radius: 8px; padding: 7px 14px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
-.cal-title { font-size: 17px; font-weight: 700; }
-.cal-head { display: grid; grid-template-columns: repeat(7,1fr); text-align: center; margin-bottom: 4px; }
-.cal-head span { font-size: 11px; color: var(--text-sub); font-weight: 500; padding: 4px 0; }
-.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
-.cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; border-radius: 8px; cursor: pointer; color: var(--text); }
-.cal-day.other { color: var(--text-hint); }
-.cal-day.has-work { background: var(--green-pale); color: var(--green); font-weight: 700; }
-.cal-day.today { outline: 2px solid var(--green-light); outline-offset: -1px; }
-.cal-detail { margin-top: 14px; }
-
-.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-.stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
-.stat-label { font-size: 11px; color: var(--text-sub); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; }
-.stat-val { font-size: 26px; font-weight: 700; color: var(--green); }
-.bar-row { margin-bottom: 12px; }
-.bar-row-top { display: flex; justify-content: space-between; margin-bottom: 5px; }
-.bar-name { font-size: 13px; color: var(--text); }
-.bar-hrs { font-size: 13px; font-weight: 700; color: var(--green); }
-.bar-bg { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
-.bar-fill { height: 100%; background: var(--green-light); border-radius: 4px; }
-
-.mem-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; margin-bottom: 8px; background: var(--surface); }
-.mem-left { display: flex; align-items: center; gap: 10px; }
-.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--green-pale); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--green); flex-shrink: 0; }
-.mem-name { font-size: 14px; font-weight: 500; }
-.mem-hrs { font-size: 12px; color: var(--text-sub); margin-top: 1px; }
-
-.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: flex-end; justify-content: center; }
-.modal-bg.open { display: flex; }
-.modal { background: var(--surface); border-radius: 18px 18px 0 0; padding: 20px 16px 32px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
-.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.modal-title { font-size: 16px; font-weight: 700; }
-.modal-close { background: var(--border); border: none; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer; color: var(--text-sub); }
-
-.toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--text); color: white; padding: 11px 22px; border-radius: 25px; font-size: 14px; font-weight: 500; z-index: 999; display: none; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
-
-.status-bar { padding: 8px 14px; font-size: 12px; text-align: center; display: none; }
-.status-ok { background: var(--green-pale); color: var(--green); }
-.status-err { background: #FEE2E2; color: var(--red); }
-.status-loading { background: #FEF9C3; color: #92400E; }
-
-.fab { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; border-radius: 50%; background: var(--green); color: white; border: none; font-size: 20px; cursor: pointer; box-shadow: 0 4px 16px rgba(45,106,79,0.35); z-index: 150; display: flex; align-items: center; justify-content: center; transition: transform 0.15s; }
-.fab:active { transform: scale(0.93); }
-.fab.syncing { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.config-info { background: var(--green-pale); border-radius: 10px; padding: 12px; font-size: 13px; color: var(--green); line-height: 1.7; margin-bottom: 14px; }
-.step { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.step:last-child { border-bottom: none; }
-.step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--green); color: white; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-.step-text { font-size: 13px; line-height: 1.7; }
-.step-text strong { color: var(--green); font-weight: 700; }
-.add-inline { display: flex; gap: 8px; }
-.add-inline input { flex: 1; }
+.progress-row{display:flex;align-items:center;gap:10px}
+.progress-row input[type=range]{flex:1;accent-color:var(--green)}
+.prog-val{font-size:16px;font-weight:700;color:var(--green);min-width:44px;text-align:right}
+.btn{padding:12px;border-radius:8px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;border:none;transition:all .15s;width:100%}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--green);color:#fff}
+.btn-secondary{background:var(--green-pale);color:var(--green)}
+.btn-danger{background:#FEE2E2;color:var(--red)}
+.btn-sm{padding:7px 13px;font-size:13px;width:auto;border-radius:7px}
+.log-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px;margin-bottom:9px;box-shadow:var(--shadow)}
+.log-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.log-date{font-size:12px;color:var(--text-sub)}
+.log-cat{font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px}
+.log-detail{font-size:13px;color:var(--text-sub);margin-bottom:6px;white-space:pre-wrap}
+.log-meta{font-size:12px;color:var(--text-hint)}
+.pbar{height:5px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden}
+.pbar-fill{height:100%;background:var(--green-light);border-radius:3px}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-done{background:var(--green-pale);color:var(--green)}
+.badge-mid{background:#FEF9C3;color:#92400E}
+.badge-low{background:#F1F5F9;color:var(--text-sub)}
+.log-actions{display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.log-actions button{flex:1}
+.filter-bar{display:flex;gap:8px;margin-bottom:12px}
+.filter-bar select{flex:1;font-size:13px;padding:8px 10px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cal-nav button{background:var(--green-pale);border:none;color:var(--green);border-radius:8px;padding:7px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.cal-title{font-size:17px;font-weight:700}
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:4px}
+.cal-head span{font-size:11px;color:var(--text-sub);font-weight:500;padding:4px 0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:13px;border-radius:8px;cursor:pointer;color:var(--text)}
+.cal-day.other{color:var(--text-hint)}
+.cal-day.has-work{background:var(--green-pale);color:var(--green);font-weight:700}
+.cal-day.today{outline:2px solid var(--green-light);outline-offset:-1px}
+.cal-detail{margin-top:14px}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.stat-label{font-size:11px;color:var(--text-sub);font-weight:700;letter-spacing:.5px;margin-bottom:4px}
+.stat-val{font-size:26px;font-weight:700;color:var(--green)}
+.bar-row{margin-bottom:12px}
+.bar-row-top{display:flex;justify-content:space-between;margin-bottom:5px}
+.bar-name{font-size:13px;color:var(--text)}
+.bar-hrs{font-size:13px;font-weight:700;color:var(--green)}
+.bar-bg{height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:var(--green-light);border-radius:4px}
+.mem-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:8px;background:var(--surface)}
+.mem-left{display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--green-pale);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--green);flex-shrink:0}
+.mem-name{font-size:14px;font-weight:500}
+.mem-hrs{font-size:12px;color:var(--text-sub);margin-top:1px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 32px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.modal-title{font-size:16px;font-weight:700}
+.modal-close{background:var(--border);border:none;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;color:var(--text-sub)}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:11px 22px;border-radius:25px;font-size:14px;font-weight:500;z-index:999;display:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.status-bar{padding:8px 14px;font-size:12px;text-align:center;display:none}
+.status-ok{background:var(--green-pale);color:var(--green)}
+.status-err{background:#FEE2E2;color:var(--red)}
+.status-loading{background:#FEF9C3;color:#92400E}
+.fab{position:fixed;bottom:20px;right:20px;width:50px;height:50px;border-radius:50%;background:var(--green);color:#fff;border:none;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(45,106,79,.35);z-index:150;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.fab:active{transform:scale(.93)}
+.fab.syncing{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.config-info{background:var(--green-pale);border-radius:10px;padding:12px;font-size:13px;color:var(--green);line-height:1.7;margin-bottom:14px}
+.add-inline{display:flex;gap:8px}
+.add-inline input{flex:1}
 </style>
 </head>
 <body>
@@ -159,13 +118,11 @@ textarea { resize: vertical; min-height: 70px; }
   <div class="header">
     <h1>🌱 農作業管理</h1>
     <div class="header-actions">
-      <button class="icon-btn" onclick="exportCSV()" title="CSV出力">📥</button>
-      <button class="icon-btn" onclick="showPage('settings', document.querySelector('[data-page=settings]'))" title="設定">⚙️</button>
+      <button class="icon-btn" onclick="exportCSV()">📥</button>
+      <button class="icon-btn" onclick="showPage('settings',document.querySelector('[data-page=settings]'))">⚙️</button>
     </div>
   </div>
-
   <div id="status-bar" class="status-bar"></div>
-
   <nav class="nav">
     <button class="nav-btn active" data-page="record" onclick="showPage('record',this)"><span class="icon">✏️</span>記録</button>
     <button class="nav-btn" data-page="log" onclick="showPage('log',this)"><span class="icon">📋</span>履歴</button>
@@ -184,12 +141,7 @@ textarea { resize: vertical; min-height: 70px; }
       </div>
       <div class="field">
         <label>作業者（複数選択可）</label>
-        <div class="multi-select-wrap" id="ms-record-wrap">
-          <div class="multi-select-box" id="ms-record-box" onclick="toggleDropdown('ms-record')">
-            <span class="multi-placeholder" id="ms-record-placeholder">タップして選択...</span>
-          </div>
-          <div class="multi-dropdown" id="ms-record-dropdown"></div>
-        </div>
+        <div class="member-grid" id="rec-member-grid"></div>
       </div>
       <div class="field">
         <label>作業時間</label>
@@ -260,14 +212,8 @@ textarea { resize: vertical; min-height: 70px; }
       <div class="stat-box"><div class="stat-label">総作業日数</div><div class="stat-val" id="st-days">0</div></div>
       <div class="stat-box"><div class="stat-label">総稼働時間</div><div class="stat-val" id="st-hours">0h</div></div>
     </div>
-    <div class="card">
-      <div class="section-label">メンバー別 稼働時間</div>
-      <div id="stats-mem"></div>
-    </div>
-    <div class="card">
-      <div class="section-label">カテゴリ別 作業時間</div>
-      <div id="stats-cat"></div>
-    </div>
+    <div class="card"><div class="section-label">メンバー別 稼働時間</div><div id="stats-mem"></div></div>
+    <div class="card"><div class="section-label">カテゴリ別 作業時間</div><div id="stats-cat"></div></div>
   </div>
 
   <!-- メンバー管理 -->
@@ -286,9 +232,7 @@ textarea { resize: vertical; min-height: 70px; }
   <div id="page-settings" class="page">
     <div class="card">
       <div class="section-label">クラウド連携設定</div>
-      <div class="config-info">
-        <strong>Google Apps Script URL</strong>を入力すると全員がリアルタイムでデータを共有できます。
-      </div>
+      <div class="config-info"><strong>Google Apps Script URL</strong>を入力すると全員がリアルタイムでデータを共有できます。</div>
       <div class="field">
         <label>Apps Script URL</label>
         <input type="text" id="gas-url" placeholder="https://script.google.com/macros/s/..." style="font-size:12px">
@@ -314,12 +258,7 @@ textarea { resize: vertical; min-height: 70px; }
     <div class="field"><label>作業日</label><input type="date" id="e-date"></div>
     <div class="field">
       <label>作業者（複数選択可）</label>
-      <div class="multi-select-wrap" id="ms-edit-wrap">
-        <div class="multi-select-box" id="ms-edit-box" onclick="toggleDropdown('ms-edit')">
-          <span class="multi-placeholder" id="ms-edit-placeholder">タップして選択...</span>
-        </div>
-        <div class="multi-dropdown" id="ms-edit-dropdown"></div>
-      </div>
+      <div class="member-grid" id="edit-member-grid"></div>
     </div>
     <div class="field row2">
       <div><label>開始</label><input type="time" id="e-start"></div>
@@ -344,27 +283,40 @@ textarea { resize: vertical; min-height: 70px; }
   </div>
 </div>
 
-<button class="fab" id="sync-fab" onclick="syncAll()" title="クラウドと同期">☁️</button>
+<button class="fab" id="sync-fab" onclick="syncAll()">☁️</button>
 <div class="toast" id="toast"></div>
 
 <script>
-// ---- State ----
-let state = JSON.parse(localStorage.getItem('farmApp3') || '{"members":[],"records":[]}');
+// 旧バージョンのデータを自動移行（farmApp2/3/4 -> farmApp）
+(function() {
+  var current = localStorage.getItem('farmApp');
+  var currentData = current ? JSON.parse(current) : null;
+  var hasData = currentData && currentData.records && currentData.records.length > 0;
+  if (!hasData) {
+    var oldKeys = ['farmApp4', 'farmApp3', 'farmApp2'];
+    for (var i = 0; i < oldKeys.length; i++) {
+      var old = localStorage.getItem(oldKeys[i]);
+      if (old) {
+        try {
+          var d = JSON.parse(old);
+          if (d.records && d.records.length > 0) {
+            localStorage.setItem('farmApp', old);
+            break;
+          }
+        } catch(e) {}
+      }
+    }
+  }
+})();
+
+let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[]}');
 let gasUrl = localStorage.getItem('gasUrl') || '';
 let editId = null;
 let calY = new Date().getFullYear(), calM = new Date().getMonth();
 
-// マルチセレクト用選択状態
-const msState = { record: [], edit: [] };
+function save() { localStorage.setItem('farmApp', JSON.stringify(state)); }
+function saveGasUrl() { gasUrl = document.getElementById('gas-url').value.trim(); localStorage.setItem('gasUrl', gasUrl); toast('URLを保存しました'); }
 
-function save() { localStorage.setItem('farmApp3', JSON.stringify(state)); }
-function saveGasUrl() {
-  gasUrl = document.getElementById('gas-url').value.trim();
-  localStorage.setItem('gasUrl', gasUrl);
-  toast('URLを保存しました');
-}
-
-// ---- Toast & Status ----
 function toast(msg, dur=2200) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.style.display = 'block';
@@ -376,61 +328,40 @@ function setStatus(msg, type) {
   b.textContent = msg; b.className = 'status-bar status-' + type; b.style.display = 'block';
 }
 
-// ---- Multi Select ----
-function buildDropdown(ns) {
-  const dd = document.getElementById('ms-' + ns + '-dropdown');
-  dd.innerHTML = state.members.map(m => {
-    const sel = msState[ns].includes(m);
-    return `<div class="multi-option ${sel ? 'selected' : ''}" onclick="toggleOption('${ns}','${m}')">
-      <div class="chk">${sel ? '✓' : ''}</div>
-      <span>${m}</span>
+// ---- メンバーチェックボックスグリッド ----
+const CHECKMARK = `<svg viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,7 5,10 11,3"/></svg>`;
+
+function renderMemberGrid(containerId, selectedMembers) {
+  const el = document.getElementById(containerId);
+  if (!state.members.length) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--text-hint);padding:8px 0">メンバータブで登録してください</p>';
+    return;
+  }
+  el.innerHTML = state.members.map(m => {
+    const on = selectedMembers.includes(m);
+    return `<div class="mem-check-item ${on ? 'on' : ''}" id="mci-${containerId}-${m.replace(/\s/g,'_')}" onclick="toggleMember('${containerId}','${m}')">
+      <div class="mem-check-label">
+        <div class="mem-chk-box">${CHECKMARK}</div>
+        <span class="mem-check-name">${m}</span>
+      </div>
     </div>`;
   }).join('');
-  updateTags(ns);
 }
-function toggleDropdown(ns) {
-  const dd = document.getElementById('ms-' + ns + '-dropdown');
-  dd.classList.toggle('open');
-  buildDropdown(ns);
+
+function toggleMember(containerId, name) {
+  const id = 'mci-' + containerId + '-' + name.replace(/\s/g, '_');
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('on');
 }
-function toggleOption(ns, name) {
-  const idx = msState[ns].indexOf(name);
-  if (idx >= 0) msState[ns].splice(idx, 1);
-  else msState[ns].push(name);
-  buildDropdown(ns);
-}
-function updateTags(ns) {
-  const box = document.getElementById('ms-' + ns + '-box');
-  const ph = document.getElementById('ms-' + ns + '-placeholder');
-  const sel = msState[ns];
-  // タグ要素を一旦削除
-  [...box.querySelectorAll('.multi-tag')].forEach(e => e.remove());
-  if (sel.length === 0) {
-    ph.style.display = '';
-  } else {
-    ph.style.display = 'none';
-    sel.forEach(m => {
-      const tag = document.createElement('span');
-      tag.className = 'multi-tag';
-      tag.innerHTML = `${m}<button onclick="event.stopPropagation();toggleOption('${ns}','${m}')">×</button>`;
-      box.insertBefore(tag, ph);
-    });
-  }
-}
-function setSelected(ns, members) {
-  msState[ns] = [...(members || [])];
-  updateTags(ns);
-}
-// ドロップダウン外クリックで閉じる
-document.addEventListener('click', function(e) {
-  ['record', 'edit'].forEach(ns => {
-    const wrap = document.getElementById('ms-' + ns + '-wrap');
-    if (wrap && !wrap.contains(e.target)) {
-      const dd = document.getElementById('ms-' + ns + '-dropdown');
-      if (dd) dd.classList.remove('open');
-    }
+
+function getSelectedMembers(containerId) {
+  return state.members.filter(m => {
+    const id = 'mci-' + containerId + '-' + m.replace(/\s/g, '_');
+    const el = document.getElementById(id);
+    return el && el.classList.contains('on');
   });
-});
+}
 
 // ---- Navigation ----
 function showPage(id, btn) {
@@ -442,61 +373,43 @@ function showPage(id, btn) {
   if (id === 'calendar') renderCalendar();
   if (id === 'stats') renderStats();
   if (id === 'members') renderMembers();
-  if (id === 'record') { buildDropdown('record'); }
+  if (id === 'record') renderMemberGrid('rec-member-grid', []);
   if (id === 'settings') document.getElementById('gas-url').value = gasUrl;
 }
 
 // ---- Helpers ----
 function calcH(s, e) {
   if (!s || !e) return 0;
-  const parts_s = s.split(':'), parts_e = e.split(':');
-  const sh = parseInt(parts_s[0], 10), sm = parseInt(parts_s[1], 10);
-  const eh = parseInt(parts_e[0], 10), em = parseInt(parts_e[1], 10);
-  if (isNaN(sh)||isNaN(sm)||isNaN(eh)||isNaN(em)) return 0;
+  const [sh, sm] = s.split(':').map(Number);
+  const [eh, em] = e.split(':').map(Number);
+  if ([sh,sm,eh,em].some(isNaN)) return 0;
   return Math.max(0, ((eh * 60 + em) - (sh * 60 + sm)) / 60);
 }
-function fmtH(h) {
-  const n = parseFloat(h);
-  if (isNaN(n)) return '0h';
-  return (Math.round(n * 10) / 10) + 'h';
-}
-function initials(name) {
-  const p = name.split(/[\s　]/);
-  return p.length >= 2 ? p[0].slice(-1) + p[1][0] : name.slice(0, 2);
-}
+function fmtH(h) { const n = parseFloat(h); return isNaN(n) ? '0h' : (Math.round(n * 10) / 10) + 'h'; }
+function initials(n) { const p = n.split(/[\s　]/); return p.length >= 2 ? p[0].slice(-1) + p[1][0] : n.slice(0, 2); }
 function badgeClass(p) { return p >= 100 ? 'badge-done' : p >= 50 ? 'badge-mid' : 'badge-low'; }
+function memArr(r) { return Array.isArray(r.members) ? r.members : []; }
 
 // ---- Members ----
 function addMember() {
   const inp = document.getElementById('new-mem'), n = inp.value.trim();
   if (!n) return;
   if (!state.members.includes(n)) { state.members.push(n); save(); }
-  inp.value = ''; renderMembers(); buildDropdown('record');
+  inp.value = ''; renderMembers(); renderMemberGrid('rec-member-grid', []);
   toast('メンバーを追加しました');
   if (gasUrl) pushMembersToCloud();
 }
 function deleteMember(name) {
   if (!confirm(`「${name}」を削除しますか？`)) return;
   state.members = state.members.filter(m => m !== name);
-  // msStateからも削除
-  ['record','edit'].forEach(ns => {
-    msState[ns] = msState[ns].filter(m => m !== name);
-    updateTags(ns);
-  });
-  save(); renderMembers(); buildDropdown('record');
+  save(); renderMembers(); renderMemberGrid('rec-member-grid', []);
   if (gasUrl) pushMembersToCloud();
 }
 function renderMembers() {
   const el = document.getElementById('mem-list');
-  if (!state.members.length) {
-    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:20px 0">メンバーが登録されていません</p>';
-    return;
-  }
+  if (!state.members.length) { el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:20px 0">メンバーが登録されていません</p>'; return; }
   el.innerHTML = state.members.map(m => {
-    const h = state.records.reduce((s, r) => {
-      const hrs = calcH(r.start, r.end);
-      return s + (Array.isArray(r.members) && r.members.includes(m) ? hrs : 0);
-    }, 0);
+    const h = state.records.reduce((s, r) => s + (memArr(r).includes(m) ? calcH(r.start, r.end) : 0), 0);
     return `<div class="mem-item">
       <div class="mem-left">
         <div class="avatar">${initials(m)}</div>
@@ -512,7 +425,7 @@ function saveRecord() {
   const date = document.getElementById('rec-date').value;
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
-  const members = [...msState.record];
+  const members = getSelectedMembers('rec-member-grid');
   if (!date) { toast('⚠️ 作業日を入力してください'); return; }
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
   const rec = {
@@ -524,16 +437,13 @@ function saveRecord() {
     members
   };
   state.records.unshift(rec); save();
-  // フォームリセット
   document.getElementById('rec-detail').value = '';
   document.getElementById('rec-memo').value = '';
   document.getElementById('rec-prog').value = 50;
   document.getElementById('prog-num').textContent = '50%';
   document.getElementById('rec-start').value = '09:00';
   document.getElementById('rec-end').value = '15:00';
-  msState.record = [];
-  updateTags('record');
-  buildDropdown('record');
+  renderMemberGrid('rec-member-grid', []);
   toast('✅ 記録を保存しました');
   if (gasUrl) pushRecordToCloud(rec);
 }
@@ -541,29 +451,27 @@ function saveRecord() {
 // ---- Log ----
 function populateFilterMembers() {
   const sel = document.getElementById('f-member'), cur = sel.value;
-  sel.innerHTML = '<option value="">全メンバー</option>' + state.members.map(m =>
-    `<option value="${m}" ${cur === m ? 'selected' : ''}>${m}</option>`).join('');
+  sel.innerHTML = '<option value="">全メンバー</option>' + state.members.map(m => `<option value="${m}" ${cur===m?'selected':''}>${m}</option>`).join('');
 }
 function renderLog() {
   populateFilterMembers();
   const fm = document.getElementById('f-member').value;
   const fmon = document.getElementById('f-month').value;
   let recs = [...state.records];
-  if (fm) recs = recs.filter(r => Array.isArray(r.members) && r.members.includes(fm));
+  if (fm) recs = recs.filter(r => memArr(r).includes(fm));
   if (fmon) recs = recs.filter(r => r.date && r.date.split('-')[1] === fmon);
   const el = document.getElementById('log-list');
   if (!recs.length) { el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:32px 0">記録がありません</p>'; return; }
   el.innerHTML = recs.map(r => {
     const h = calcH(r.start, r.end), p = Number(r.progress) || 0;
-    const mems = Array.isArray(r.members) ? r.members : [];
     return `<div class="log-item">
       <div class="log-top">
         <span class="log-date">${r.date}　${r.start}〜${r.end}（${fmtH(h)}）</span>
         <span class="badge ${badgeClass(p)}">${p}%</span>
       </div>
       <div class="log-cat">${r.category}</div>
-      <div class="log-detail">${r.detail || ''}${r.memo ? '\n📝 ' + r.memo : ''}</div>
-      <div class="log-meta">👤 ${mems.join('・')}</div>
+      <div class="log-detail">${r.detail||''}${r.memo?'\n📝 '+r.memo:''}</div>
+      <div class="log-meta">👤 ${memArr(r).join('・')}</div>
       <div class="pbar"><div class="pbar-fill" style="width:${p}%"></div></div>
       <div class="log-actions">
         <button class="btn btn-secondary btn-sm" onclick="openEdit(${r.id})">✏️ 編集</button>
@@ -586,30 +494,16 @@ function openEdit(id) {
   document.getElementById('e-memo').value = r.memo || '';
   document.getElementById('e-prog').value = r.progress || 0;
   document.getElementById('e-prog-num').textContent = r.progress || 0;
-  setSelected('edit', Array.isArray(r.members) ? r.members : []);
-  buildDropdown('edit');
+  renderMemberGrid('edit-member-grid', memArr(r));
   document.getElementById('edit-modal').classList.add('open');
 }
-function closeModal() {
-  document.getElementById('edit-modal').classList.remove('open');
-  editId = null;
-}
+function closeModal() { document.getElementById('edit-modal').classList.remove('open'); editId = null; }
 function updateRecord() {
   const idx = state.records.findIndex(r => r.id === editId);
   if (idx < 0) return;
-  const members = [...msState.edit];
+  const members = getSelectedMembers('edit-member-grid');
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
-  state.records[idx] = {
-    ...state.records[idx],
-    date: document.getElementById('e-date').value,
-    start: document.getElementById('e-start').value,
-    end: document.getElementById('e-end').value,
-    category: document.getElementById('e-cat').value,
-    detail: document.getElementById('e-detail').value,
-    memo: document.getElementById('e-memo').value,
-    progress: Number(document.getElementById('e-prog').value),
-    members
-  };
+  state.records[idx] = { ...state.records[idx], date: document.getElementById('e-date').value, start: document.getElementById('e-start').value, end: document.getElementById('e-end').value, category: document.getElementById('e-cat').value, detail: document.getElementById('e-detail').value, memo: document.getElementById('e-memo').value, progress: Number(document.getElementById('e-prog').value), members };
   save(); closeModal(); renderLog(); toast('✅ 更新しました');
   if (gasUrl) syncAll();
 }
@@ -630,170 +524,92 @@ function deleteRecord() {
 function renderCalendar() {
   const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
   document.getElementById('cal-title').textContent = `${calY}年 ${months[calM]}`;
-  const first = new Date(calY, calM, 1).getDay();
-  const days = new Date(calY, calM + 1, 0).getDate();
-  const prev = new Date(calY, calM, 0).getDate();
-  const today = new Date();
-  const wkDays = {};
-  state.records.forEach(r => {
-    if (!r.date) return;
-    const [y, m, d] = r.date.split('-').map(Number);
-    if (y === calY && m - 1 === calM) wkDays[d] = true;
-  });
+  const first = new Date(calY, calM, 1).getDay(), days = new Date(calY, calM+1, 0).getDate(), prev = new Date(calY, calM, 0).getDate();
+  const today = new Date(), wkDays = {};
+  state.records.forEach(r => { if (!r.date) return; const [y,m,d] = r.date.split('-').map(Number); if (y===calY && m-1===calM) wkDays[d]=true; });
   let html = '';
-  for (let i = 0; i < first; i++) html += `<div class="cal-day other">${prev - first + 1 + i}</div>`;
-  for (let d = 1; d <= days; d++) {
-    const isT = d === today.getDate() && calM === today.getMonth() && calY === today.getFullYear();
-    html += `<div class="cal-day ${wkDays[d] ? 'has-work' : ''} ${isT ? 'today' : ''}" onclick="showDay(${d})">${d}</div>`;
-  }
-  const rem = (7 - ((first + days) % 7)) % 7;
-  for (let i = 1; i <= rem; i++) html += `<div class="cal-day other">${i}</div>`;
+  for (let i=0;i<first;i++) html += `<div class="cal-day other">${prev-first+1+i}</div>`;
+  for (let d=1;d<=days;d++) { const isT=d===today.getDate()&&calM===today.getMonth()&&calY===today.getFullYear(); html += `<div class="cal-day ${wkDays[d]?'has-work':''} ${isT?'today':''}" onclick="showDay(${d})">${d}</div>`; }
+  const rem=(7-((first+days)%7))%7; for (let i=1;i<=rem;i++) html+=`<div class="cal-day other">${i}</div>`;
   document.getElementById('cal-grid').innerHTML = html;
   document.getElementById('cal-detail').innerHTML = '';
 }
-function calMove(d) { calM += d; if (calM > 11) { calM = 0; calY++; } if (calM < 0) { calM = 11; calY--; } renderCalendar(); }
+function calMove(d) { calM+=d; if(calM>11){calM=0;calY++;} if(calM<0){calM=11;calY--;} renderCalendar(); }
 function showDay(d) {
-  const ds = `${calY}-${String(calM + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  const recs = state.records.filter(r => r.date === ds);
-  const el = document.getElementById('cal-detail');
-  if (!recs.length) { el.innerHTML = `<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:12px">${d}日の記録はありません</p>`; return; }
-  el.innerHTML = recs.map(r => {
-    const mems = Array.isArray(r.members) ? r.members : [];
-    return `<div class="log-item">
-      <div class="log-top"><span class="log-date">${r.start}〜${r.end}（${fmtH(calcH(r.start, r.end))}）</span><span class="badge ${badgeClass(r.progress)}">${r.progress}%</span></div>
-      <div class="log-cat">${r.category}</div>
-      <div class="log-detail">${r.detail || ''}</div>
-      <div class="log-meta">👤 ${mems.join('・')}</div>
-      <button class="btn btn-secondary btn-sm" onclick="openEdit(${r.id})" style="margin-top:8px">✏️ 編集</button>
-    </div>`;
-  }).join('');
+  const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const recs=state.records.filter(r=>r.date===ds);
+  const el=document.getElementById('cal-detail');
+  if(!recs.length){el.innerHTML=`<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:12px">${d}日の記録はありません</p>`;return;}
+  el.innerHTML=recs.map(r=>`<div class="log-item">
+    <div class="log-top"><span class="log-date">${r.start}〜${r.end}（${fmtH(calcH(r.start,r.end))}）</span><span class="badge ${badgeClass(r.progress)}">${r.progress}%</span></div>
+    <div class="log-cat">${r.category}</div><div class="log-detail">${r.detail||''}</div>
+    <div class="log-meta">👤 ${memArr(r).join('・')}</div>
+    <button class="btn btn-secondary btn-sm" onclick="openEdit(${r.id})" style="margin-top:8px">✏️ 編集</button>
+  </div>`).join('');
 }
 
 // ---- Stats ----
 function renderStats() {
-  const days = new Set(state.records.map(r => r.date)).size;
+  const days = new Set(state.records.map(r=>r.date)).size;
   let total = 0;
-  state.records.forEach(r => {
-    const h = calcH(r.start, r.end);
-    const cnt = Array.isArray(r.members) ? r.members.length : 0;
-    if (!isNaN(h) && cnt > 0) total += h * cnt;
-  });
+  state.records.forEach(r => { const h=calcH(r.start,r.end), cnt=memArr(r).length; if(cnt>0) total+=h*cnt; });
   document.getElementById('st-days').textContent = days;
   document.getElementById('st-hours').textContent = fmtH(total);
-
-  // メンバー別
-  const mh = {};
-  state.members.forEach(m => mh[m] = 0);
-  state.records.forEach(r => {
-    const h = calcH(r.start, r.end);
-    if (!isNaN(h) && Array.isArray(r.members)) {
-      r.members.forEach(m => { mh[m] = (mh[m] || 0) + h; });
-    }
-  });
-  const maxM = Math.max(1, ...Object.values(mh).filter(v => !isNaN(v)));
-  const memHtml = Object.entries(mh).sort((a, b) => b[1] - a[1]).map(([n, h]) =>
-    `<div class="bar-row"><div class="bar-row-top"><span class="bar-name">${n}</span><span class="bar-hrs">${fmtH(h)}</span></div>
-    <div class="bar-bg"><div class="bar-fill" style="width:${Math.round((h / maxM) * 100)}%"></div></div></div>`
-  ).join('');
-  document.getElementById('stats-mem').innerHTML = memHtml || '<p style="color:var(--text-hint);font-size:14px">データがありません</p>';
-
-  // カテゴリ別
-  const ch = {};
-  state.records.forEach(r => {
-    const h = calcH(r.start, r.end);
-    const cnt = Array.isArray(r.members) ? r.members.length : 1;
-    if (!isNaN(h)) ch[r.category] = (ch[r.category] || 0) + h * cnt;
-  });
-  const maxC = Math.max(1, ...Object.values(ch).filter(v => !isNaN(v)));
-  const catHtml = Object.entries(ch).sort((a, b) => b[1] - a[1]).map(([c, h]) =>
-    `<div class="bar-row"><div class="bar-row-top"><span class="bar-name">${c}</span><span class="bar-hrs">${fmtH(h)}</span></div>
-    <div class="bar-bg"><div class="bar-fill" style="width:${Math.round((h / maxC) * 100)}%"></div></div></div>`
-  ).join('');
-  document.getElementById('stats-cat').innerHTML = catHtml || '<p style="color:var(--text-hint);font-size:14px">データがありません</p>';
+  const mh={};
+  state.members.forEach(m=>mh[m]=0);
+  state.records.forEach(r => { const h=calcH(r.start,r.end); memArr(r).forEach(m=>{mh[m]=(mh[m]||0)+h;}); });
+  const maxM=Math.max(1,...Object.values(mh).filter(v=>!isNaN(v)));
+  document.getElementById('stats-mem').innerHTML=Object.entries(mh).sort((a,b)=>b[1]-a[1]).map(([n,h])=>`<div class="bar-row"><div class="bar-row-top"><span class="bar-name">${n}</span><span class="bar-hrs">${fmtH(h)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(h/maxM*100)}%"></div></div></div>`).join('')||'<p style="color:var(--text-hint);font-size:14px">データがありません</p>';
+  const ch={};
+  state.records.forEach(r=>{const h=calcH(r.start,r.end)*Math.max(1,memArr(r).length);ch[r.category]=(ch[r.category]||0)+h;});
+  const maxC=Math.max(1,...Object.values(ch).filter(v=>!isNaN(v)));
+  document.getElementById('stats-cat').innerHTML=Object.entries(ch).sort((a,b)=>b[1]-a[1]).map(([c,h])=>`<div class="bar-row"><div class="bar-row-top"><span class="bar-name">${c}</span><span class="bar-hrs">${fmtH(h)}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(h/maxC*100)}%"></div></div></div>`).join('')||'<p style="color:var(--text-hint);font-size:14px">データがありません</p>';
 }
 
-// ---- CSV Export ----
+// ---- CSV ----
 function exportCSV() {
   if (!state.records.length) { toast('⚠️ 記録がありません'); return; }
-  const h = '作業日,開始,終了,時間(h),カテゴリ,作業内容,進捗(%),メンバー,メモ';
-  const rows = state.records.map(r => {
-    const mems = Array.isArray(r.members) ? r.members : [];
-    return [r.date, r.start, r.end, fmtH(calcH(r.start, r.end)), r.category,
-      `"${(r.detail || '').replace(/"/g, '""')}"`, r.progress,
-      `"${mems.join('・')}"`, `"${(r.memo || '').replace(/"/g, '""')}"`].join(',');
-  });
-  const csv = '\uFEFF' + h + '\n' + rows.join('\n');
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = '農作業記録_' + new Date().toISOString().slice(0, 10) + '.csv';
-  a.click(); toast('📥 CSVを出力しました');
+  const h='作業日,開始,終了,時間(h),カテゴリ,作業内容,進捗(%),メンバー,メモ';
+  const rows=state.records.map(r=>[r.date,r.start,r.end,fmtH(calcH(r.start,r.end)),r.category,`"${(r.detail||'').replace(/"/g,'""')}"`,r.progress,`"${memArr(r).join('・')}"`,`"${(r.memo||'').replace(/"/g,'""')}"`].join(','));
+  const csv='\uFEFF'+h+'\n'+rows.join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='農作業記録_'+new Date().toISOString().slice(0,10)+'.csv';a.click();toast('📥 CSVを出力しました');
 }
 
-// ---- Cloud (GAS GET方式) ----
-async function gasGet(params) {
-  const url = gasUrl + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url);
-  return res.json();
-}
-async function pushRecordToCloud(rec) {
-  if (!gasUrl) return;
-  try { await gasGet({ action: 'add', data: JSON.stringify(rec) }); } catch(e) {}
-}
-async function pushMembersToCloud() {
-  if (!gasUrl) return;
-  try { await gasGet({ action: 'syncMembers', data: JSON.stringify(state.members) }); } catch(e) {}
-}
+// ---- Cloud ----
+async function gasGet(params) { const res=await fetch(gasUrl+'?'+new URLSearchParams(params).toString()); return res.json(); }
+async function pushRecordToCloud(rec) { if(!gasUrl)return; try{await gasGet({action:'add',data:JSON.stringify(rec)});}catch(e){} }
+async function pushMembersToCloud() { if(!gasUrl)return; try{await gasGet({action:'syncMembers',data:JSON.stringify(state.members)});}catch(e){} }
 async function syncAll() {
-  if (!gasUrl) { toast('⚠️ 設定画面でURLを入力してください'); return; }
-  const fab = document.getElementById('sync-fab');
-  fab.classList.add('syncing'); setStatus('同期中...', 'loading');
+  if(!gasUrl){toast('⚠️ 設定画面でURLを入力してください');return;}
+  const fab=document.getElementById('sync-fab');fab.classList.add('syncing');setStatus('同期中...','loading');
   try {
-    // ローカルをクラウドへ送信
-    await gasGet({ action: 'syncAll', data: JSON.stringify({ records: state.records, members: state.members }) });
-    // クラウドから最新取得
-    const data = await gasGet({ action: 'getAll' });
-    if (data.records) {
-      state.records = data.records;
-      state.records.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id);
-    }
-    if (data.members && data.members.length) {
-      data.members.forEach(m => { if (!state.members.includes(m)) state.members.push(m); });
-    }
-    save(); toast('☁️ 同期完了'); setStatus('同期済み ✓', 'ok');
-    // 現在のページを再描画
-    const cur = document.querySelector('.page.active')?.id?.replace('page-', '');
-    if (cur === 'log') renderLog();
-    if (cur === 'calendar') renderCalendar();
-    if (cur === 'stats') renderStats();
-    if (cur === 'members') renderMembers();
-    if (cur === 'record') buildDropdown('record');
-  } catch(e) {
-    toast('⚠️ 同期に失敗しました'); setStatus('接続エラー', 'err');
-  }
-  fab.classList.remove('syncing');
-  setTimeout(() => setStatus('', ''), 4000);
+    await gasGet({action:'syncAll',data:JSON.stringify({records:state.records,members:state.members})});
+    const data=await gasGet({action:'getAll'});
+    if(data.records){state.records=data.records;state.records.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||b.id-a.id);}
+    if(data.members&&data.members.length){data.members.forEach(m=>{if(!state.members.includes(m))state.members.push(m);});}
+    save();toast('☁️ 同期完了');setStatus('同期済み ✓','ok');
+    const cur=document.querySelector('.page.active')?.id?.replace('page-','');
+    if(cur==='log')renderLog();
+    if(cur==='calendar')renderCalendar();
+    if(cur==='stats')renderStats();
+    if(cur==='members')renderMembers();
+    if(cur==='record')renderMemberGrid('rec-member-grid',[]);
+  } catch(e){toast('⚠️ 同期に失敗しました');setStatus('接続エラー','err');}
+  fab.classList.remove('syncing');setTimeout(()=>setStatus('',''),4000);
 }
 async function testConnection() {
-  if (!gasUrl) { toast('URLを入力してください'); return; }
-  setStatus('接続テスト中...', 'loading');
-  try {
-    const data = await gasGet({ action: 'test' });
-    if (data.ok) { toast('✅ 接続成功！'); setStatus('接続OK ✓', 'ok'); }
-    else { toast('⚠️ 接続失敗'); setStatus('接続エラー', 'err'); }
-  } catch(e) { toast('⚠️ 接続できませんでした'); setStatus('接続エラー', 'err'); }
-  setTimeout(() => setStatus('', ''), 4000);
+  if(!gasUrl){toast('URLを入力してください');return;}
+  setStatus('接続テスト中...','loading');
+  try{const data=await gasGet({action:'test'});if(data.ok){toast('✅ 接続成功！');setStatus('接続OK ✓','ok');}else{toast('⚠️ 接続失敗');setStatus('接続エラー','err');}}
+  catch(e){toast('⚠️ 接続できませんでした');setStatus('接続エラー','err');}
+  setTimeout(()=>setStatus('',''),4000);
 }
-function clearLocal() {
-  if (!confirm('ローカルデータを全削除しますか？')) return;
-  state = { members: [], records: [] }; save(); toast('リセットしました');
-}
+function clearLocal(){if(!confirm('ローカルデータを全削除しますか？'))return;state={members:[],records:[]};save();toast('リセットしました');}
 
 // ---- Init ----
-document.getElementById('rec-date').value = new Date().toISOString().slice(0, 10);
-if (gasUrl) {
-  // 起動時にクラウドからメンバー・記録を取得
-  syncAll();
-}
+document.getElementById('rec-date').value=new Date().toISOString().slice(0,10);
+renderMemberGrid('rec-member-grid',[]);
+if(gasUrl)syncAll();
 </script>
 </body>
 </html>
