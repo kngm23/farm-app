@@ -328,6 +328,44 @@ function setStatus(msg, type) {
   b.textContent = msg; b.className = 'status-bar status-' + type; b.style.display = 'block';
 }
 
+// ---- データ正規化（1899年バグ対策）----
+function normalizeTime(val) {
+  if (!val) return '';
+  var s = String(val);
+  // 1899年形式 "1899-12-29T21:00:00.000Z" → "21:00"
+  if (s.includes('1899') || s.includes('T')) {
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      var h = String(d.getUTCHours()).padStart(2,'0');
+      var m = String(d.getUTCMinutes()).padStart(2,'0');
+      return h + ':' + m;
+    }
+  }
+  // "HH:MM:SS" → "HH:MM"
+  if (s.length === 8 && s[2] === ':') return s.slice(0,5);
+  return s;
+}
+function normalizeDate(val) {
+  if (!val) return '';
+  var s = String(val);
+  // ISOString形式 "2026-03-14T15:00:00.000Z" → "2026-03-14"
+  if (s.includes('T')) return s.split('T')[0];
+  return s;
+}
+function normalizeRecord(r) {
+  return {
+    id: r.id,
+    date: normalizeDate(r.date),
+    start: normalizeTime(r.start),
+    end: normalizeTime(r.end),
+    category: r.category || '',
+    detail: r.detail || '',
+    progress: Number(r.progress) || 0,
+    members: Array.isArray(r.members) ? r.members : [],
+    memo: r.memo || ''
+  };
+}
+
 // ---- メンバー選択（タップON/OFF方式）----
 const CHECKMARK = `<svg viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,7 5,10 11,3"/></svg>`;
 
@@ -430,15 +468,15 @@ function saveRecord() {
   const members = getSelectedMembers('rec-member-grid');
   if (!date) { toast('⚠️ 作業日を入力してください'); return; }
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
-  const rec = {
+  const rec = normalizeRecord({
     id: Date.now(), date, start, end,
     category: document.getElementById('rec-cat').value,
     detail: document.getElementById('rec-detail').value,
     progress: Number(document.getElementById('rec-prog').value),
     memo: document.getElementById('rec-memo').value,
     members
-  };
-  state.records.unshift(rec); save();
+  });
+  toast('⏳ 保存中...');
   document.getElementById('rec-detail').value = '';
   document.getElementById('rec-memo').value = '';
   document.getElementById('rec-prog').value = 50;
@@ -446,8 +484,12 @@ function saveRecord() {
   document.getElementById('rec-start').value = '09:00';
   document.getElementById('rec-end').value = '15:00';
   renderMemberGrid('rec-member-grid', []);
-  toast('✅ 記録を保存しました');
-  if (gasUrl) pushRecordToCloud(rec);
+  if (gasUrl) {
+    pushRecordToCloud(rec);
+  } else {
+    state.records.unshift(rec); save();
+    toast('✅ 記録を保存しました');
+  }
 }
 
 // ---- Log ----
@@ -506,24 +548,42 @@ function updateRecord() {
   const members = getSelectedMembers('edit-member-grid');
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
   state.records[idx] = { ...state.records[idx], date: document.getElementById('e-date').value, start: document.getElementById('e-start').value, end: document.getElementById('e-end').value, category: document.getElementById('e-cat').value, detail: document.getElementById('e-detail').value, memo: document.getElementById('e-memo').value, progress: Number(document.getElementById('e-prog').value), members };
-  save(); closeModal(); renderLog(); toast('✅ 更新しました');
-  if (gasUrl) pushUpdateToCloud(state.records[idx]);
+  if (gasUrl) {
+    closeModal();
+    toast('⏳ 更新中...');
+    pushUpdateToCloud(state.records[idx]);
+  } else {
+    save(); closeModal(); renderLog(); toast('✅ 更新しました');
+  }
 }
 async function pushUpdateToCloud(rec) {
   try { await gasGet({action:'update', data:JSON.stringify(rec)}); } catch(e) {}
 }
 function deleteById(id) {
   if (!confirm('この記録を削除しますか？')) return;
-  state.records = state.records.filter(r => r.id !== id);
-  save(); renderLog(); toast('削除しました');
-  if (gasUrl) syncAll();
+  setStatus('削除中...', 'loading');
+  if (gasUrl) {
+    gasGet({ action: 'delete', data: JSON.stringify({ id: id }) })
+      .then(() => syncAll())
+      .catch(() => toast('⚠️ 削除に失敗しました'));
+  } else {
+    state.records = state.records.filter(r => r.id !== id);
+    save(); renderLog(); toast('削除しました');
+  }
 }
 function deleteRecord() {
   if (!confirm('この記録を削除しますか？')) return;
   const id = editId;
-  state.records = state.records.filter(r => r.id !== id);
-  save(); closeModal(); renderLog(); toast('削除しました');
-  if (gasUrl) syncAll();
+  closeModal();
+  setStatus('削除中...', 'loading');
+  if (gasUrl) {
+    gasGet({ action: 'delete', data: JSON.stringify({ id: id }) })
+      .then(() => syncAll())
+      .catch(() => toast('⚠️ 削除に失敗しました'));
+  } else {
+    state.records = state.records.filter(r => r.id !== id);
+    save(); renderLog(); toast('削除しました');
+  }
 }
 
 // ---- Calendar ----
@@ -599,49 +659,120 @@ function exportCSV() {
 }
 
 // ---- Cloud ----
-async function gasGet(params) { const res=await fetch(gasUrl+'?'+new URLSearchParams(params).toString()); return res.json(); }
-async function pushRecordToCloud(rec) { if(!gasUrl)return; try{await gasGet({action:'add',data:JSON.stringify(rec)});}catch(e){} }
-async function pushMembersToCloud() { if(!gasUrl)return; try{await gasGet({action:'syncMembers',data:JSON.stringify(state.members)});}catch(e){} }
-async function syncAll(pushFirst=true) {
-  if(!gasUrl){toast('⚠️ 設定画面でURLを入力してください');return;}
-  const fab=document.getElementById('sync-fab');fab.classList.add('syncing');setStatus('同期中...','loading');
+async function gasGet(params) {
+  const res = await fetch(gasUrl + '?' + new URLSearchParams(params).toString());
+  return res.json();
+}
+
+// 時刻・日付の正規化（1899年対策）
+function normalizeRecord(r) {
+  function fixTime(val) {
+    if (!val) return '';
+    var s = String(val);
+    if (s.includes('1899') || (s.includes('T') && s.includes(':'))) {
+      var d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0');
+      }
+    }
+    return s;
+  }
+  function fixDate(val) {
+    if (!val) return '';
+    var s = String(val);
+    if (s.includes('T')) return s.split('T')[0];
+    return s;
+  }
+  return Object.assign({}, r, {
+    date: fixDate(r.date),
+    start: fixTime(r.start),
+    end: fixTime(r.end),
+    members: Array.isArray(r.members) ? r.members : []
+  });
+}
+
+// ☁️同期：クラウドのデータでローカルを完全上書き（クラウド優先）
+async function syncAll() {
+  if (!gasUrl) { toast('⚠️ 設定画面でURLを入力してください'); return; }
+  const fab = document.getElementById('sync-fab');
+  fab.classList.add('syncing'); setStatus('同期中...', 'loading');
   try {
-    // pushFirst=trueの時のみローカルをクラウドに送信（削除・編集後）
-    // 起動時はpushFirst=falseでクラウドのデータを優先取得
-    if(pushFirst && state.records.length > 0) {
-      await gasGet({action:'syncAll',data:JSON.stringify({records:state.records,members:state.members})});
+    const data = await gasGet({ action: 'getAll' });
+    if (data.records) {
+      state.records = data.records.map(normalizeRecord);
+      state.records.sort((a, b) => (b.date||'').localeCompare(a.date||'') || b.id - a.id);
     }
-    const data=await gasGet({action:'getAll'});
-    if(data.records && data.records.length > 0) {
-      state.records=data.records;
-      state.records.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||b.id-a.id);
+    if (data.members && data.members.length) {
+      state.members = data.members;
     }
-    if(data.members&&data.members.length){
-      data.members.forEach(m=>{if(!state.members.includes(m))state.members.push(m);});
-    }
-    save();toast('☁️ 同期完了');setStatus('同期済み ✓','ok');
-    const cur=document.querySelector('.page.active')?.id?.replace('page-','');
-    if(cur==='log')renderLog();
-    if(cur==='calendar')renderCalendar();
-    if(cur==='stats')renderStats();
-    if(cur==='members')renderMembers();
-    if(cur==='record')renderMemberGrid('rec-member-grid', []);
-  } catch(e){toast('⚠️ 同期に失敗しました');setStatus('接続エラー','err');}
-  fab.classList.remove('syncing');setTimeout(()=>setStatus('',''),4000);
+    save();
+    toast('☁️ 同期完了');
+    setStatus('同期済み ✓', 'ok');
+    refreshCurrentPage();
+  } catch(e) {
+    toast('⚠️ 同期に失敗しました'); setStatus('接続エラー', 'err');
+  }
+  fab.classList.remove('syncing');
+  setTimeout(() => setStatus('', ''), 4000);
 }
+
+// 記録追加：クラウドに書き込み → 同期
+async function pushRecordToCloud(rec) {
+  if (!gasUrl) return;
+  try {
+    await gasGet({ action: 'add', data: JSON.stringify(rec) });
+    await syncAll();
+  } catch(e) { toast('⚠️ クラウドへの保存に失敗しました'); }
+}
+
+// 編集：クラウドに書き込み → 同期
+async function pushUpdateToCloud(rec) {
+  if (!gasUrl) return;
+  try {
+    await gasGet({ action: 'update', data: JSON.stringify(rec) });
+    await syncAll();
+  } catch(e) { toast('⚠️ クラウドへの更新に失敗しました'); }
+}
+
+// メンバー：クラウドに書き込み → 同期
+async function pushMembersToCloud() {
+  if (!gasUrl) return;
+  try {
+    await gasGet({ action: 'syncMembers', data: JSON.stringify(state.members) });
+    await syncAll();
+  } catch(e) { toast('⚠️ メンバーの同期に失敗しました'); }
+}
+
+// 現在のページを再描画
+function refreshCurrentPage() {
+  const cur = document.querySelector('.page.active')?.id?.replace('page-', '');
+  if (cur === 'log') renderLog();
+  if (cur === 'calendar') renderCalendar();
+  if (cur === 'stats') renderStats();
+  if (cur === 'members') renderMembers();
+  if (cur === 'record') renderMemberGrid('rec-member-grid', []);
+}
+
 async function testConnection() {
-  if(!gasUrl){toast('URLを入力してください');return;}
-  setStatus('接続テスト中...','loading');
-  try{const data=await gasGet({action:'test'});if(data.ok){toast('✅ 接続成功！');setStatus('接続OK ✓','ok');}else{toast('⚠️ 接続失敗');setStatus('接続エラー','err');}}
-  catch(e){toast('⚠️ 接続できませんでした');setStatus('接続エラー','err');}
-  setTimeout(()=>setStatus('',''),4000);
+  if (!gasUrl) { toast('URLを入力してください'); return; }
+  setStatus('接続テスト中...', 'loading');
+  try {
+    const data = await gasGet({ action: 'test' });
+    if (data.ok) { toast('✅ 接続成功！'); setStatus('接続OK ✓', 'ok'); }
+    else { toast('⚠️ 接続失敗'); setStatus('接続エラー', 'err'); }
+  } catch(e) { toast('⚠️ 接続できませんでした'); setStatus('接続エラー', 'err'); }
+  setTimeout(() => setStatus('', ''), 4000);
 }
-function clearLocal(){if(!confirm('ローカルデータを全削除しますか？'))return;state={members:[],records:[]};save();toast('リセットしました');}
+
+function clearLocal() {
+  if (!confirm('ローカルデータを全削除しますか？')) return;
+  state = { members: [], records: [] }; save(); toast('リセットしました');
+}
 
 // ---- Init ----
-document.getElementById('rec-date').value=new Date().toISOString().slice(0,10);
+document.getElementById('rec-date').value = new Date().toISOString().slice(0, 10);
 renderMemberGrid('rec-member-grid', []);
-if(gasUrl)syncAll(false);
+if (gasUrl) syncAll();
 </script>
 </body>
 </html>
