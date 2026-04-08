@@ -556,9 +556,7 @@ function updateRecord() {
     save(); closeModal(); renderLog(); toast('✅ 更新しました');
   }
 }
-async function pushUpdateToCloud(rec) {
-  try { await gasGet({action:'update', data:JSON.stringify(rec)}); } catch(e) {}
-}
+
 function deleteById(id) {
   if (!confirm('この記録を削除しますか？')) return;
   setStatus('削除中...', 'loading');
