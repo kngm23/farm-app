@@ -223,6 +223,10 @@ textarea{resize:vertical;min-height:70px}
     <div class="card">
       <div class="section-label">新しい作業を記録</div>
       <div class="field">
+        <label>作業日</label>
+        <input type="date" id="rec-date" onchange="onRecDateChange()">
+      </div>
+      <div class="field">
         <label>作業者（出勤済みのみ）</label>
         <div class="mem-dropdown-wrap">
           <div class="mem-dropdown-trigger" id="rec-mem-trigger" onclick="toggleMemDropdown('rec')">
@@ -480,9 +484,9 @@ function buildMemDropdown(ns) {
   // 記録ページ（ns='rec'）は出勤済みメンバーのみ表示
   let members = state.members;
   if (ns === 'rec') {
-    const today = getTodayJST();
+    const recDate = document.getElementById('rec-date')?.value || getTodayJST();
     const attendedToday = new Set((state.attendances || [])
-      .filter(a => a.date === today)
+      .filter(a => a.date === recDate)
       .map(a => a.member));
     members = state.members.filter(m => attendedToday.has(m));
     if (!members.length) {
@@ -609,6 +613,7 @@ function showPage(id, btn) {
   if (id === 'stats') renderStats();
   if (id === 'members') renderMembers();
   if (id === 'record') {
+    document.getElementById('rec-date').value = getTodayJST();
     renderMemberGrid('rec-member-grid', []);
     document.getElementById('rec-start').value = '09:00';
     setRecEndTimeNow();
@@ -674,6 +679,17 @@ function openMemDetail(name) {
 
 function closeMemDetail() {
   document.getElementById('mem-detail-modal').classList.remove('open');
+}
+
+function onRecDateChange() {
+  // 作業日が変わったら出勤済みメンバーを再構築・開始時刻を再セット
+  const list = document.getElementById('rec-mem-list');
+  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
+  const label = document.getElementById('rec-mem-label');
+  if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
+  document.getElementById('rec-mem-trigger')?.classList.remove('open');
+  document.getElementById('rec-mem-arrow')?.classList.remove('open');
+  document.getElementById('rec-start').value = '09:00';
 }
 
 function toggleMonthDetail(id) {
@@ -761,8 +777,8 @@ function setRecEndTimeNow() {
 function saveRecord() {
   const members = getSelectedMembers('rec');
   if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
-  // 作業日は出勤データから取得（今日の日付）
-  const date = getTodayJST();
+  // 作業日はrec-dateから取得（デフォルト当日・手動変更可）
+  const date = document.getElementById('rec-date').value || getTodayJST();
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
   if (!start) { toast('⚠️ 開始時刻を入力してください'); return; }
@@ -776,6 +792,7 @@ function saveRecord() {
     members
   });
   toast('⏳ 保存中...');
+  document.getElementById('rec-date').value = getTodayJST();
   document.getElementById('rec-detail').value = '';
   document.getElementById('rec-memo').value = '';
   document.getElementById('rec-prog').value = 50;
@@ -1242,7 +1259,7 @@ function renderAttendStatus() {
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
 function applyAttendTime() {
-  const date = getTodayJST(); // 作業日は常に当日
+  const date = document.getElementById('rec-date')?.value || getTodayJST();
   if (!state.attendances) return;
   const selected = getSelectedMembers('rec');
   if (!selected.length) {
