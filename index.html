@@ -119,6 +119,14 @@ textarea{resize:vertical;min-height:70px}
 .mem-dropdown-item.selected{background:var(--green-pale)}
 .mem-dropdown-name{font-size:15px;color:var(--text)}
 .mem-dropdown-item.selected .mem-dropdown-name{color:var(--green);font-weight:500}
+/* 出勤ステータス */
+.attend-status-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)}
+.attend-status-item:last-child{border-bottom:none}
+.attend-name{font-size:14px;color:var(--text);font-weight:500}
+.attend-time{font-size:13px;font-weight:700;color:var(--green)}
+.attend-none{font-size:13px;color:var(--text-hint)}
+.attend-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:var(--green-pale);color:var(--green)}
+.attend-badge-none{background:#F1F5F9;color:var(--text-sub)}
 /* 集計アコーディオン */
 .acc-row{margin-bottom:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .acc-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--surface);-webkit-user-select:none;user-select:none;transition:background .15s}
@@ -149,12 +157,42 @@ textarea{resize:vertical;min-height:70px}
   </div>
   <div id="status-bar" class="status-bar"></div>
   <nav class="nav">
+    <button class="nav-btn" data-page="attend" onclick="showPage('attend',this)"><span class="icon">🏃</span>出勤</button>
     <button class="nav-btn active" data-page="record" onclick="showPage('record',this)"><span class="icon">✏️</span>記録</button>
     <button class="nav-btn" data-page="log" onclick="showPage('log',this)"><span class="icon">📋</span>履歴</button>
-    <button class="nav-btn" data-page="calendar" onclick="showPage('calendar',this)"><span class="icon">📅</span>カレンダー</button>
     <button class="nav-btn" data-page="stats" onclick="showPage('stats',this)"><span class="icon">📊</span>集計</button>
     <button class="nav-btn" data-page="members" onclick="showPage('members',this)"><span class="icon">👥</span>メンバー</button>
   </nav>
+
+  <!-- 出勤 -->
+  <div id="page-attend" class="page">
+    <div class="card">
+      <div class="section-label">出勤を記録</div>
+      <div class="field">
+        <label>作業日</label>
+        <input type="date" id="att-date">
+      </div>
+      <div class="field">
+        <label>出勤者（複数選択可）</label>
+        <div class="mem-dropdown-wrap">
+          <div class="mem-dropdown-trigger" id="att-mem-trigger" onclick="toggleMemDropdown('att')">
+            <span class="mem-dropdown-label placeholder" id="att-mem-label">タップして選択</span>
+            <span class="mem-dropdown-arrow" id="att-mem-arrow">▼</span>
+          </div>
+          <div class="mem-dropdown-list" id="att-mem-list"></div>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>出勤時刻</label>
+        <input type="time" id="att-time">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveAttend()" style="margin-bottom:14px">🏃 出勤を記録する</button>
+    <div class="card">
+      <div class="section-label">本日の出勤状況</div>
+      <div id="attend-status-list"><p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">読み込み中...</p></div>
+    </div>
+  </div>
 
   <!-- 記録入力 -->
   <div id="page-record" class="page active">
@@ -346,7 +384,7 @@ textarea{resize:vertical;min-height:70px}
   }
 })();
 
-let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[]}');
+let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[],"attendances":[]}');
 let gasUrl = localStorage.getItem('gasUrl') || '';
 let editId = null;
 let calY = new Date().getFullYear(), calM = new Date().getMonth();
@@ -447,6 +485,8 @@ function toggleMemItem(ns, idx) {
   if (!item) return;
   item.classList.toggle('selected');
   updateMemLabel(ns);
+  // 記録ページで選択した場合、出勤時刻を自動セット
+  if (ns === 'rec') applyAttendTime();
 }
 
 function updateMemLabel(ns) {
@@ -469,7 +509,7 @@ function getSelectedMembers(ns) {
 }
 
 function renderMemberGrid(containerId, selectedMembers) {
-  const ns = containerId.includes('rec') ? 'rec' : 'edit';
+  const ns = containerId.includes('rec') ? 'rec' : containerId.includes('att') ? 'att' : 'edit';
   const list = document.getElementById(ns + '-mem-list');
   const label = document.getElementById(ns + '-mem-label');
   if (list) { list.innerHTML = ''; list.classList.remove('open'); }
@@ -506,6 +546,7 @@ function showPage(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
+  if (id === 'attend') { renderMemberGrid('att-member-grid', []); renderAttendStatus(); initAttendPage(); }
   if (id === 'log') { renderLog(); populateFilterMembers(); }
   if (id === 'calendar') renderCalendar();
   if (id === 'stats') renderStats();
@@ -902,6 +943,9 @@ async function syncAll() {
     if (data.members && data.members.length) {
       state.members = data.members;
     }
+    if (data.attendances) {
+      state.attendances = data.attendances;
+    }
     save();
     toast('☁️ 同期完了');
     setStatus('同期済み ✓', 'ok');
@@ -947,6 +991,7 @@ function refreshCurrentPage() {
   if (cur === 'calendar') renderCalendar();
   if (cur === 'stats') renderStats();
   if (cur === 'members') renderMembers();
+  if (cur === 'attend') { renderAttendStatus(); }
   if (cur === 'record') renderMemberGrid('rec-member-grid', []);
 }
 
@@ -961,9 +1006,99 @@ async function testConnection() {
   setTimeout(() => setStatus('', ''), 4000);
 }
 
+// ---- 出勤機能 ----
+function initAttendPage() {
+  document.getElementById('att-date').value = getTodayJST();
+  // 現在時刻を日本時間でセット
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const hh = String(jst.getUTCHours()).padStart(2, '0');
+  const mm = String(jst.getUTCMinutes()).padStart(2, '0');
+  document.getElementById('att-time').value = hh + ':' + mm;
+  renderMemberGrid('att-member-grid', []);
+}
+
+function saveAttend() {
+  const date = document.getElementById('att-date').value;
+  const time = document.getElementById('att-time').value;
+  const members = getSelectedMembers('att');
+  if (!date) { toast('⚠️ 作業日を入力してください'); return; }
+  if (!members.length) { toast('⚠️ 出勤者を選択してください'); return; }
+  if (!time) { toast('⚠️ 出勤時刻を入力してください'); return; }
+
+  // 既存の出勤記録と重複チェック（同日同人は上書き）
+  if (!state.attendances) state.attendances = [];
+  members.forEach(m => {
+    const existing = state.attendances.findIndex(a => a.date === date && a.member === m);
+    if (existing >= 0) {
+      state.attendances[existing].time = time;
+    } else {
+      state.attendances.push({ id: Date.now() + Math.random(), date, member: m, time });
+    }
+  });
+  save();
+  toast('✅ 出勤を記録しました');
+
+  // プルダウンリセット
+  renderMemberGrid('att-member-grid', []);
+  renderAttendStatus();
+
+  // クラウドに同期
+  if (gasUrl) pushAttendToCloud();
+}
+
+function renderAttendStatus() {
+  const el = document.getElementById('attend-status-list');
+  if (!el) return;
+  const today = getTodayJST();
+  const todayAttends = (state.attendances || []).filter(a => a.date === today);
+
+  if (!state.members.length) {
+    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">メンバーが登録されていません</p>';
+    return;
+  }
+
+  el.innerHTML = state.members.map(m => {
+    const att = todayAttends.find(a => a.member === m);
+    return `<div class="attend-status-item">
+      <span class="attend-name">${m}</span>
+      ${att
+        ? `<div style="display:flex;align-items:center;gap:8px">
+            <span class="attend-time">${att.time}</span>
+            <span class="attend-badge">出勤済</span>
+           </div>`
+        : `<span class="attend-badge attend-badge-none">未出勤</span>`
+      }
+    </div>`;
+  }).join('');
+}
+
+// 記録ページ：作業者選択時に出勤時刻を自動セット
+function applyAttendTime() {
+  const date = document.getElementById('rec-date').value;
+  if (!date || !state.attendances) return;
+  const selected = getSelectedMembers('rec');
+  if (!selected.length) return;
+  // 選択メンバーの中で最も早い出勤時刻を取得
+  const times = selected.map(m => {
+    const att = state.attendances.find(a => a.date === date && a.member === m);
+    return att ? att.time : null;
+  }).filter(Boolean).sort();
+  if (times.length > 0) {
+    document.getElementById('rec-start').value = times[0];
+  }
+}
+
+async function pushAttendToCloud() {
+  if (!gasUrl) return;
+  try {
+    await gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances || []) });
+  } catch(e) { console.warn('attend sync failed', e); }
+}
+
 function clearLocal() {
   if (!confirm('ローカルデータを全削除しますか？')) return;
-  state = { members: [], records: [] }; save(); toast('リセットしました');
+  state = { members: [], records: [], attendances: [] }; save(); toast('リセットしました');
 }
 
 // ---- Init ----
@@ -976,6 +1111,10 @@ function getTodayJST() {
 document.getElementById('rec-date').value = getTodayJST();
 renderMemberGrid('rec-member-grid', []);
 if (gasUrl) syncAll();
+// 出勤ページ用初期値（バックグラウンドで準備）
+document.getElementById('att-date').value = getTodayJST();
+const _now = new Date(), _jst = new Date(_now.getTime() + 9*60*60*1000);
+document.getElementById('att-time').value = String(_jst.getUTCHours()).padStart(2,'0')+':'+String(_jst.getUTCMinutes()).padStart(2,'0');
 </script>
 </body>
 </html>
