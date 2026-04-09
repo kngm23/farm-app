@@ -467,7 +467,8 @@ function toggleMemDropdown(ns) {
   const arrow = document.getElementById(ns + '-mem-arrow');
   if (!list) return;
   const isOpen = list.classList.contains('open');
-  ['rec','edit'].forEach(n => {
+  // 全てのプルダウンを閉じる（rec/edit/att）
+  ['rec','edit','att'].forEach(n => {
     document.getElementById(n+'-mem-list')?.classList.remove('open');
     document.getElementById(n+'-mem-trigger')?.classList.remove('open');
     document.getElementById(n+'-mem-arrow')?.classList.remove('open');
@@ -529,7 +530,7 @@ function renderMemberGrid(containerId, selectedMembers) {
 }
 
 document.addEventListener('click', function(e) {
-  ['rec','edit'].forEach(ns => {
+  ['rec','edit','att'].forEach(ns => {
     const trigger = document.getElementById(ns+'-mem-trigger');
     const list = document.getElementById(ns+'-mem-list');
     if (trigger && list && !trigger.contains(e.target) && !list.contains(e.target)) {
@@ -551,7 +552,11 @@ function showPage(id, btn) {
   if (id === 'calendar') renderCalendar();
   if (id === 'stats') renderStats();
   if (id === 'members') renderMembers();
-  if (id === 'record') renderMemberGrid('rec-member-grid', []);
+  if (id === 'record') {
+    renderMemberGrid('rec-member-grid', []);
+    document.getElementById('rec-date').value = getTodayJST();
+    document.getElementById('rec-start').value = '09:00';
+  }
   if (id === 'settings') document.getElementById('gas-url').value = gasUrl;
 }
 
@@ -1058,19 +1063,25 @@ function renderAttendStatus() {
     return;
   }
 
-  el.innerHTML = state.members.map(m => {
-    const att = todayAttends.find(a => a.member === m);
-    return `<div class="attend-status-item">
+  // 出勤済みのみ表示
+  const attendedList = state.members
+    .map(m => ({ m, att: todayAttends.find(a => a.member === m) }))
+    .filter(({ att }) => att);
+
+  if (!attendedList.length) {
+    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">本日の出勤記録はありません</p>';
+    return;
+  }
+
+  el.innerHTML = attendedList.map(({ m, att }) =>
+    `<div class="attend-status-item">
       <span class="attend-name">${m}</span>
-      ${att
-        ? `<div style="display:flex;align-items:center;gap:8px">
-            <span class="attend-time">${att.time}</span>
-            <span class="attend-badge">出勤済</span>
-           </div>`
-        : `<span class="attend-badge attend-badge-none">未出勤</span>`
-      }
-    </div>`;
-  }).join('');
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="attend-time">${att.time}</span>
+        <span class="attend-badge">出勤済</span>
+      </div>
+    </div>`
+  ).join('');
 }
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
@@ -1078,14 +1089,22 @@ function applyAttendTime() {
   const date = document.getElementById('rec-date').value;
   if (!date || !state.attendances) return;
   const selected = getSelectedMembers('rec');
-  if (!selected.length) return;
-  // 選択メンバーの中で最も早い出勤時刻を取得
+  if (!selected.length) {
+    // 選択者がいなくなったらデフォルトに戻す
+    document.getElementById('rec-start').value = '09:00';
+    return;
+  }
+  // 選択したメンバーの中で最も早い出勤時刻を取得
   const times = selected.map(m => {
     const att = state.attendances.find(a => a.date === date && a.member === m);
     return att ? att.time : null;
-  }).filter(Boolean).sort();
+  }).filter(Boolean).sort(); // 文字列ソートで HH:MM は正しく昇順になる
   if (times.length > 0) {
+    // 最も早い出勤時刻を開始時間にセット
     document.getElementById('rec-start').value = times[0];
+  } else {
+    // 出勤記録のないメンバーのみ選択の場合は09:00のまま
+    document.getElementById('rec-start').value = '09:00';
   }
 }
 
