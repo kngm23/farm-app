@@ -100,6 +100,30 @@ textarea{resize:vertical;min-height:70px}
 .config-info{background:var(--green-pale);border-radius:10px;padding:12px;font-size:13px;color:var(--green);line-height:1.7;margin-bottom:14px}
 .add-inline{display:flex;gap:8px}
 .add-inline input{flex:1}
+/* メンバー詳細モーダル */
+.mem-profile{display:flex;flex-direction:column;align-items:center;padding:20px 0 16px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.mem-profile-avatar{width:72px;height:72px;border-radius:50%;background:var(--green-pale);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--green);margin-bottom:10px}
+.mem-profile-name{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
+.mem-profile-total{font-size:13px;color:var(--text-sub)}
+.mem-profile-total span{font-weight:700;color:var(--green)}
+.mem-month-block{margin-bottom:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.mem-month-header{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:var(--green-pale);cursor:pointer;-webkit-user-select:none;user-select:none;transition:background .15s}
+.mem-month-header:active{background:#b7e4c7}
+.mem-month-title{font-size:14px;font-weight:700;color:var(--green)}
+.mem-month-right{display:flex;align-items:center;gap:8px}
+.mem-month-hrs{font-size:14px;font-weight:700;color:var(--green)}
+.mem-month-arrow{font-size:11px;color:var(--green);transition:transform .2s}
+.mem-month-arrow.open{transform:rotate(180deg)}
+.mem-month-body{display:none;background:var(--surface)}
+.mem-month-body.open{display:block}
+.mem-day-item{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border)}
+.mem-day-item:last-child{border-bottom:none}
+.mem-day-left{display:flex;flex-direction:column;gap:2px}
+.mem-day-date{font-size:12px;color:var(--text-sub)}
+.mem-day-cat{font-size:13px;color:var(--text);font-weight:500}
+.mem-day-hrs{font-size:13px;font-weight:700;color:var(--green);white-space:nowrap}
+.mem-item-tap{cursor:pointer;transition:background .15s}
+.mem-item-tap:active{background:var(--green-pale)}
 /* 作業者プルダウン */
 .mem-dropdown-wrap{position:relative}
 .mem-dropdown-trigger{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer;-webkit-user-select:none;user-select:none;min-height:44px;transition:border-color .15s}
@@ -351,6 +375,17 @@ textarea{resize:vertical;min-height:70px}
     <div class="field"><label>メモ</label><textarea id="e-memo" style="min-height:50px"></textarea></div>
     <button class="btn btn-primary" onclick="updateRecord()" style="margin-bottom:8px">✅ 保存する</button>
     <button class="btn btn-danger" onclick="deleteRecord()">🗑️ この記録を削除</button>
+  </div>
+</div>
+
+<!-- メンバー詳細モーダル -->
+<div class="modal-bg" id="mem-detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title"></span>
+      <button class="modal-close" onclick="closeMemDetail()">✕</button>
+    </div>
+    <div id="mem-detail-content"></div>
   </div>
 </div>
 
@@ -611,17 +646,106 @@ function deleteMember(name) {
 }
 function renderMembers() {
   const el = document.getElementById('mem-list');
-  if (!state.members.length) { el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:20px 0">メンバーが登録されていません</p>'; return; }
+  if (!state.members.length) {
+    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:20px 0">メンバーが登録されていません</p>';
+    return;
+  }
   el.innerHTML = state.members.map(m => {
     const h = state.records.reduce((s, r) => s + (memArr(r).includes(m) ? calcH(r.start, r.end) : 0), 0);
-    return `<div class="mem-item">
+    const safe = m.replace(/'/g, "\'");
+    return `<div class="mem-item mem-item-tap" onclick="openMemDetail('${safe}')">
       <div class="mem-left">
         <div class="avatar">${initials(m)}</div>
-        <div><div class="mem-name">${m}</div><div class="mem-hrs">${fmtH(h)} 稼働</div></div>
+        <div>
+          <div class="mem-name">${m}</div>
+          <div class="mem-hrs">${fmtH(h)} 稼働</div>
+        </div>
       </div>
-      <button class="btn btn-danger btn-sm" onclick="deleteMember('${m}')">削除</button>
+      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMember('${safe}')">削除</button>
     </div>`;
   }).join('');
+}
+
+function openMemDetail(name) {
+  document.getElementById('mem-detail-name').textContent = '';
+  document.getElementById('mem-detail-modal').classList.add('open');
+  renderMemDetail(name);
+}
+
+function closeMemDetail() {
+  document.getElementById('mem-detail-modal').classList.remove('open');
+}
+
+function toggleMonthDetail(id) {
+  const body = document.getElementById('mmd-body-' + id);
+  const arrow = document.getElementById('mmd-arrow-' + id);
+  if (body) body.classList.toggle('open');
+  if (arrow) arrow.classList.toggle('open');
+}
+
+function renderMemDetail(name) {
+  const el = document.getElementById('mem-detail-content');
+  const recs = state.records.filter(r => memArr(r).includes(name));
+  const totalH = recs.reduce((s, r) => s + calcH(r.start, r.end), 0);
+
+  // 月別集計: { 'yyyy-mm': { total: h, days: [{date, cat, h}] } }
+  const monthData = {};
+  recs.forEach(r => {
+    const ym = r.date ? r.date.slice(0, 7) : '不明';
+    const h = calcH(r.start, r.end);
+    if (!monthData[ym]) monthData[ym] = { total: 0, days: [] };
+    monthData[ym].total += h;
+    monthData[ym].days.push({ date: r.date || '不明', cat: r.category || 'その他', h });
+  });
+
+  const sortedMonths = Object.keys(monthData).sort((a, b) => b.localeCompare(a));
+
+  if (!sortedMonths.length) {
+    el.innerHTML = `<div class="mem-profile">
+      <div class="mem-profile-avatar">${initials(name)}</div>
+      <div class="mem-profile-name">${name}</div>
+      <div class="mem-profile-total">作業記録がありません</div>
+    </div>`;
+    return;
+  }
+
+  const monthsHtml = sortedMonths.map((ym, idx) => {
+    const parts = ym.split('-');
+    const label = ym === '不明' ? '日付不明' : `${parseInt(parts[0])}年${parseInt(parts[1])}月`;
+    const data = monthData[ym];
+    const dayRows = data.days
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(d => {
+        let dateLabel = d.date;
+        if (d.date && d.date.includes('-')) {
+          const dp = d.date.split('-');
+          dateLabel = `${parseInt(dp[1])}月${parseInt(dp[2])}日`;
+        }
+        return `<div class="mem-day-item">
+          <div class="mem-day-left">
+            <span class="mem-day-date">${dateLabel}</span>
+            <span class="mem-day-cat">${d.cat}</span>
+          </div>
+          <span class="mem-day-hrs">${fmtH(d.h)}</span>
+        </div>`;
+      }).join('');
+    return `<div class="mem-month-block">
+      <div class="mem-month-header" onclick="toggleMonthDetail(${idx})">
+        <span class="mem-month-title">${label}</span>
+        <div class="mem-month-right">
+          <span class="mem-month-hrs">${fmtH(data.total)}</span>
+          <span class="mem-month-arrow" id="mmd-arrow-${idx}">▼</span>
+        </div>
+      </div>
+      <div class="mem-month-body" id="mmd-body-${idx}">${dayRows}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="mem-profile">
+    <div class="mem-profile-avatar">${initials(name)}</div>
+    <div class="mem-profile-name">${name}</div>
+    <div class="mem-profile-total">総稼働時間：<span>${fmtH(totalH)}</span></div>
+  </div>${monthsHtml}`;
 }
 
 // ---- Save Record ----
