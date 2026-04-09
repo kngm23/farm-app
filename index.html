@@ -157,15 +157,15 @@ textarea{resize:vertical;min-height:70px}
   </div>
   <div id="status-bar" class="status-bar"></div>
   <nav class="nav">
-    <button class="nav-btn" data-page="attend" onclick="showPage('attend',this)"><span class="icon">🏃</span>出勤</button>
-    <button class="nav-btn active" data-page="record" onclick="showPage('record',this)"><span class="icon">✏️</span>記録</button>
+    <button class="nav-btn active" data-page="attend" onclick="showPage('attend',this)"><span class="icon">🏃</span>出勤</button>
+    <button class="nav-btn" data-page="record" onclick="showPage('record',this)"><span class="icon">✏️</span>記録</button>
     <button class="nav-btn" data-page="log" onclick="showPage('log',this)"><span class="icon">📋</span>履歴</button>
     <button class="nav-btn" data-page="stats" onclick="showPage('stats',this)"><span class="icon">📊</span>集計</button>
     <button class="nav-btn" data-page="members" onclick="showPage('members',this)"><span class="icon">👥</span>メンバー</button>
   </nav>
 
   <!-- 出勤 -->
-  <div id="page-attend" class="page">
+  <div id="page-attend" class="page active">
     <div class="card">
       <div class="section-label">出勤を記録</div>
       <div class="field">
@@ -195,15 +195,11 @@ textarea{resize:vertical;min-height:70px}
   </div>
 
   <!-- 記録入力 -->
-  <div id="page-record" class="page active">
+  <div id="page-record" class="page">
     <div class="card">
       <div class="section-label">新しい作業を記録</div>
       <div class="field">
-        <label>作業日</label>
-        <input type="date" id="rec-date">
-      </div>
-      <div class="field">
-        <label>作業者（複数選択可）</label>
+        <label>作業者（出勤済みのみ）</label>
         <div class="mem-dropdown-wrap">
           <div class="mem-dropdown-trigger" id="rec-mem-trigger" onclick="toggleMemDropdown('rec')">
             <span class="mem-dropdown-label placeholder" id="rec-mem-label">タップして選択</span>
@@ -215,8 +211,8 @@ textarea{resize:vertical;min-height:70px}
       <div class="field">
         <label>作業時間</label>
         <div class="row2">
-          <div><label style="margin-bottom:4px">開始</label><input type="time" id="rec-start" value="09:00"></div>
-          <div><label style="margin-bottom:4px">終了</label><input type="time" id="rec-end" value="15:00"></div>
+          <div><label style="margin-bottom:4px">開始（出勤時刻）</label><input type="time" id="rec-start" value="09:00"></div>
+          <div><label style="margin-bottom:4px">終了（自動・変更可）</label><input type="time" id="rec-end"></div>
         </div>
       </div>
       <div class="field">
@@ -445,13 +441,30 @@ function normalizeRecord(r) {
 function buildMemDropdown(ns) {
   const list = document.getElementById(ns + '-mem-list');
   if (!list) return;
-  if (!state.members.length) {
+
+  // 記録ページ（ns='rec'）は出勤済みメンバーのみ表示
+  let members = state.members;
+  if (ns === 'rec') {
+    const today = getTodayJST();
+    const attendedToday = new Set((state.attendances || [])
+      .filter(a => a.date === today)
+      .map(a => a.member));
+    members = state.members.filter(m => attendedToday.has(m));
+    if (!members.length) {
+      list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-hint)">本日の出勤記録がありません</div>';
+      updateMemLabel(ns);
+      return;
+    }
+  }
+
+  if (!members.length) {
     list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-hint)">メンバータブで登録してください</div>';
     updateMemLabel(ns);
     return;
   }
+
   const currentSelected = getSelectedMembers(ns);
-  list.innerHTML = state.members.map((m, idx) => {
+  list.innerHTML = members.map((m, idx) => {
     const sel = currentSelected.includes(m);
     return `<div class="mem-dropdown-item ${sel?'selected':''}" id="mdi-${ns}-${idx}" data-name="${m.replace(/"/g,'&quot;')}" onclick="toggleMemItem('${ns}',${idx})">
       <div class="mem-dropdown-chk"></div>
@@ -517,8 +530,16 @@ function renderMemberGrid(containerId, selectedMembers) {
   if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
   document.getElementById(ns+'-mem-trigger')?.classList.remove('open');
   document.getElementById(ns+'-mem-arrow')?.classList.remove('open');
-  if (selectedMembers && selectedMembers.length && list && state.members.length) {
-    list.innerHTML = state.members.map((m, idx) => {
+  if (selectedMembers && selectedMembers.length && list) {
+    // 記録(rec)は出勤済みのみ / それ以外は全メンバー
+    let members = state.members;
+    if (ns === 'rec') {
+      const today = getTodayJST();
+      const attended = new Set((state.attendances||[]).filter(a=>a.date===today).map(a=>a.member));
+      members = state.members.filter(m => attended.has(m));
+    }
+    if (!members.length) return;
+    list.innerHTML = members.map((m, idx) => {
       const sel = selectedMembers.includes(m);
       return `<div class="mem-dropdown-item ${sel?'selected':''}" id="mdi-${ns}-${idx}" data-name="${m.replace(/"/g,'&quot;')}" onclick="toggleMemItem('${ns}',${idx})">
         <div class="mem-dropdown-chk"></div>
@@ -554,8 +575,8 @@ function showPage(id, btn) {
   if (id === 'members') renderMembers();
   if (id === 'record') {
     renderMemberGrid('rec-member-grid', []);
-    document.getElementById('rec-date').value = getTodayJST();
     document.getElementById('rec-start').value = '09:00';
+    setRecEndTimeNow();
   }
   if (id === 'settings') document.getElementById('gas-url').value = gasUrl;
 }
@@ -604,13 +625,24 @@ function renderMembers() {
 }
 
 // ---- Save Record ----
+function setRecEndTimeNow() {
+  // 現在時刻（JST）を終了時間にセット
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const hh = String(jst.getUTCHours()).padStart(2, '0');
+  const mm = String(jst.getUTCMinutes()).padStart(2, '0');
+  document.getElementById('rec-end').value = hh + ':' + mm;
+}
+
 function saveRecord() {
-  const date = document.getElementById('rec-date').value;
+  const members = getSelectedMembers('rec');
+  if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
+  // 作業日は出勤データから取得（今日の日付）
+  const date = getTodayJST();
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
-  const members = getSelectedMembers('rec');
-  if (!date) { toast('⚠️ 作業日を入力してください'); return; }
-  if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
+  if (!start) { toast('⚠️ 開始時刻を入力してください'); return; }
+  if (!end) { toast('⚠️ 終了時刻を入力してください'); return; }
   const rec = normalizeRecord({
     id: Date.now(), date, start, end,
     category: document.getElementById('rec-cat').value,
@@ -625,7 +657,7 @@ function saveRecord() {
   document.getElementById('rec-prog').value = 50;
   document.getElementById('prog-num').textContent = '50%';
   document.getElementById('rec-start').value = '09:00';
-  document.getElementById('rec-end').value = '15:00';
+  setRecEndTimeNow();
   renderMemberGrid('rec-member-grid', []);
   if (gasUrl) {
     pushRecordToCloud(rec);
@@ -1086,8 +1118,8 @@ function renderAttendStatus() {
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
 function applyAttendTime() {
-  const date = document.getElementById('rec-date').value;
-  if (!date || !state.attendances) return;
+  const date = getTodayJST(); // 作業日は常に当日
+  if (!state.attendances) return;
   const selected = getSelectedMembers('rec');
   if (!selected.length) {
     // 選択者がいなくなったらデフォルトに戻す
@@ -1127,13 +1159,9 @@ function getTodayJST() {
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return jst.toISOString().slice(0, 10);
 }
-document.getElementById('rec-date').value = getTodayJST();
-renderMemberGrid('rec-member-grid', []);
+// 出勤ページ初期化（デフォルトページ）
+initAttendPage();
 if (gasUrl) syncAll();
-// 出勤ページ用初期値（バックグラウンドで準備）
-document.getElementById('att-date').value = getTodayJST();
-const _now = new Date(), _jst = new Date(_now.getTime() + 9*60*60*1000);
-document.getElementById('att-time').value = String(_jst.getUTCHours()).padStart(2,'0')+':'+String(_jst.getUTCMinutes()).padStart(2,'0');
 </script>
 </body>
 </html>
