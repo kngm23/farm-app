@@ -147,10 +147,20 @@ textarea{resize:vertical;min-height:70px}
 .attend-status-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)}
 .attend-status-item:last-child{border-bottom:none}
 .attend-name{font-size:14px;color:var(--text);font-weight:500}
-.attend-time{font-size:13px;font-weight:700;color:var(--green)}
-.attend-none{font-size:13px;color:var(--text-hint)}
-.attend-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:var(--green-pale);color:var(--green)}
-.attend-badge-none{background:#F1F5F9;color:var(--text-sub)}
+.attend-time{font-size:12px;color:var(--text-sub)}
+.attend-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.badge-in{background:#E1F5EE;color:#0F6E56}
+.badge-out{background:#F1F5F9;color:#5F5E5A}
+.badge-working{background:var(--green-pale);color:var(--green)}
+/* 出勤・退勤ボタン横並び */
+.attend-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.btn-attend-in,.btn-attend-out{aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;padding:0}
+.btn-attend-in{background:var(--green);color:#fff;border:none}
+.btn-attend-in:active{transform:scale(.96);background:#245c42}
+.btn-attend-out{background:#F1F5F9;color:#444;border:1px solid var(--border)}
+.btn-attend-out:active{transform:scale(.96);background:#E0E0E0}
+.attend-btn-icon{font-size:36px;line-height:1}
+.attend-btn-label{font-size:15px;font-weight:700}
 /* 集計アコーディオン */
 .acc-row{margin-bottom:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .acc-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--surface);-webkit-user-select:none;user-select:none;transition:background .15s}
@@ -181,7 +191,7 @@ textarea{resize:vertical;min-height:70px}
   </div>
   <div id="status-bar" class="status-bar"></div>
   <nav class="nav">
-    <button class="nav-btn active" data-page="attend" onclick="showPage('attend',this)"><span class="icon">🏃</span>出勤</button>
+    <button class="nav-btn active" data-page="attend" onclick="showPage('attend',this)"><span class="icon">📋</span>勤怠</button>
     <button class="nav-btn" data-page="record" onclick="showPage('record',this)"><span class="icon">✏️</span>記録</button>
     <button class="nav-btn" data-page="log" onclick="showPage('log',this)"><span class="icon">📋</span>履歴</button>
     <button class="nav-btn" data-page="stats" onclick="showPage('stats',this)"><span class="icon">📊</span>集計</button>
@@ -191,13 +201,9 @@ textarea{resize:vertical;min-height:70px}
   <!-- 出勤 -->
   <div id="page-attend" class="page active">
     <div class="card">
-      <div class="section-label">出勤を記録</div>
-      <div class="field">
-        <label>作業日</label>
-        <input type="date" id="att-date">
-      </div>
-      <div class="field">
-        <label>出勤者（複数選択可）</label>
+      <div class="section-label">出勤 / 退勤</div>
+      <div class="field" style="margin-bottom:0">
+        <label>対象者（複数選択可）</label>
         <div class="mem-dropdown-wrap">
           <div class="mem-dropdown-trigger" id="att-mem-trigger" onclick="toggleMemDropdown('att')">
             <span class="mem-dropdown-label placeholder" id="att-mem-label">タップして選択</span>
@@ -206,12 +212,17 @@ textarea{resize:vertical;min-height:70px}
           <div class="mem-dropdown-list" id="att-mem-list"></div>
         </div>
       </div>
-      <div class="field" style="margin-bottom:0">
-        <label>出勤時刻</label>
-        <input type="time" id="att-time">
-      </div>
     </div>
-    <button class="btn btn-primary" onclick="saveAttend()" style="margin-bottom:14px">🏃 出勤を記録する</button>
+    <div class="attend-btn-row">
+      <button class="btn-attend-in" onclick="saveAttend('in')">
+        <span class="attend-btn-icon">🌅</span>
+        <span class="attend-btn-label">出勤</span>
+      </button>
+      <button class="btn-attend-out" onclick="saveAttend('out')">
+        <span class="attend-btn-icon">🌇</span>
+        <span class="attend-btn-label">退勤</span>
+      </button>
+    </div>
     <div class="card">
       <div class="section-label">本日の出勤状況</div>
       <div id="attend-status-list"><p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">読み込み中...</p></div>
@@ -236,13 +247,9 @@ textarea{resize:vertical;min-height:70px}
           <div class="mem-dropdown-list" id="rec-mem-list"></div>
         </div>
       </div>
-      <div class="field">
-        <label>作業時間</label>
-        <div class="row2">
-          <div><label style="margin-bottom:4px">開始（出勤時刻）</label><input type="time" id="rec-start" value="09:00"></div>
-          <div><label style="margin-bottom:4px">終了（自動・変更可）</label><input type="time" id="rec-end"></div>
-        </div>
-      </div>
+      <!-- 作業時間は退勤時刻から自動セット（hidden） -->
+      <input type="hidden" id="rec-start" value="09:00">
+      <input type="hidden" id="rec-end">
       <div class="field">
         <label>作業カテゴリ</label>
         <select id="rec-cat">
@@ -781,8 +788,7 @@ function saveRecord() {
   const date = document.getElementById('rec-date').value || getTodayJST();
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
-  if (!start) { toast('⚠️ 開始時刻を入力してください'); return; }
-  if (!end) { toast('⚠️ 終了時刻を入力してください'); return; }
+  // 開始・終了時刻は退勤時に自動セット（未入力でも保存可）
   const rec = normalizeRecord({
     id: Date.now(), date, start, end,
     category: document.getElementById('rec-cat').value,
@@ -1186,42 +1192,65 @@ async function testConnection() {
 
 // ---- 出勤機能 ----
 function initAttendPage() {
-  document.getElementById('att-date').value = getTodayJST();
-  // 現在時刻を日本時間でセット
-  const now = new Date();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const hh = String(jst.getUTCHours()).padStart(2, '0');
-  const mm = String(jst.getUTCMinutes()).padStart(2, '0');
-  document.getElementById('att-time').value = hh + ':' + mm;
   renderMemberGrid('att-member-grid', []);
 }
 
-function saveAttend() {
-  const date = document.getElementById('att-date').value;
-  const time = document.getElementById('att-time').value;
-  const members = getSelectedMembers('att');
-  if (!date) { toast('⚠️ 作業日を入力してください'); return; }
-  if (!members.length) { toast('⚠️ 出勤者を選択してください'); return; }
-  if (!time) { toast('⚠️ 出勤時刻を入力してください'); return; }
+function getTimeJST() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return String(jst.getUTCHours()).padStart(2,'0') + ':' + String(jst.getUTCMinutes()).padStart(2,'0');
+}
 
-  // 既存の出勤記録と重複チェック（同日同人は上書き）
+function saveAttend(type) {
+  // type: 'in'=出勤 / 'out'=退勤
+  const date = getTodayJST(); // 日付は自動取得
+  const time = getTimeJST();  // 時刻は自動取得
+  const members = getSelectedMembers('att');
+  if (!members.length) { toast('⚠️ 対象者を選択してください'); return; }
+
   if (!state.attendances) state.attendances = [];
   members.forEach(m => {
     const existing = state.attendances.findIndex(a => a.date === date && a.member === m);
-    if (existing >= 0) {
-      state.attendances[existing].time = time;
+    if (type === 'in') {
+      // 出勤：既存があれば上書き、なければ新規
+      if (existing >= 0) {
+        state.attendances[existing].time = time;
+        state.attendances[existing].leaveTime = '';
+      } else {
+        state.attendances.push({
+          id: Date.now() + Math.random(),
+          date, member: m, time, leaveTime: ''
+        });
+      }
     } else {
-      state.attendances.push({ id: Date.now() + Math.random(), date, member: m, time });
+      // 退勤：既存があれば退勤時刻を記録
+      if (existing >= 0) {
+        state.attendances[existing].leaveTime = time;
+        // 記録ページの終了時刻・開始時刻に自動セット
+        document.getElementById('rec-end').value = time;
+        document.getElementById('rec-start').value = state.attendances[existing].time || '09:00';
+      } else {
+        // 出勤記録なしで退勤の場合も記録
+        state.attendances.push({
+          id: Date.now() + Math.random(),
+          date, member: m, time: '', leaveTime: time
+        });
+        document.getElementById('rec-end').value = time;
+      }
     }
   });
   save();
-  toast('✅ 出勤を記録しました');
+  toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました');
 
   // プルダウンリセット
-  renderMemberGrid('att-member-grid', []);
-  renderAttendStatus();
+  const list = document.getElementById('att-mem-list');
+  const label = document.getElementById('att-mem-label');
+  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
+  if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
+  document.getElementById('att-mem-trigger')?.classList.remove('open');
+  document.getElementById('att-mem-arrow')?.classList.remove('open');
 
-  // クラウドに同期
+  renderAttendStatus();
   if (gasUrl) pushAttendToCloud();
 }
 
@@ -1236,7 +1265,7 @@ function renderAttendStatus() {
     return;
   }
 
-  // 出勤済みのみ表示
+  // 出勤または退勤記録がある人のみ表示
   const attendedList = state.members
     .map(m => ({ m, att: todayAttends.find(a => a.member === m) }))
     .filter(({ att }) => att);
@@ -1246,15 +1275,28 @@ function renderAttendStatus() {
     return;
   }
 
-  el.innerHTML = attendedList.map(({ m, att }) =>
-    `<div class="attend-status-item">
-      <span class="attend-name">${m}</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="attend-time">${att.time}</span>
-        <span class="attend-badge">出勤済</span>
+  el.innerHTML = attendedList.map(({ m, att }) => {
+    const hasIn = att.time;
+    const hasOut = att.leaveTime;
+    let badge, timeText;
+    if (hasOut) {
+      badge = '<span class="attend-badge badge-out">✅ 退勤済</span>';
+      timeText = `${att.time}〜${att.leaveTime}`;
+    } else if (hasIn) {
+      badge = '<span class="attend-badge badge-working">🟢 出勤中</span>';
+      timeText = `${att.time}〜`;
+    } else {
+      badge = '<span class="attend-badge badge-out">退勤のみ</span>';
+      timeText = `〜${att.leaveTime}`;
+    }
+    return `<div class="attend-status-item">
+      <div>
+        <div class="attend-name">${m}</div>
+        <div class="attend-time">${timeText}</div>
       </div>
-    </div>`
-  ).join('');
+      ${badge}
+    </div>`;
+  }).join('');
 }
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
@@ -1302,6 +1344,7 @@ function getTodayJST() {
 }
 // 出勤ページ初期化（デフォルトページ）
 initAttendPage();
+renderAttendStatus();
 if (gasUrl) syncAll();
 </script>
 </body>
