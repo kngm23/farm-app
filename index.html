@@ -154,13 +154,16 @@ textarea{resize:vertical;min-height:70px}
 .badge-working{background:var(--green-pale);color:var(--green)}
 /* 出勤・退勤ボタン横並び */
 .attend-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-.btn-attend-in,.btn-attend-out{aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;padding:0}
-.btn-attend-in{background:var(--green);color:#fff;border:none}
-.btn-attend-in:active{transform:scale(.96);background:#245c42}
-.btn-attend-out{background:#F1F5F9;color:#444;border:1px solid var(--border)}
-.btn-attend-out:active{transform:scale(.96);background:#E0E0E0}
+.btn-attend-in,.btn-attend-out{aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;padding:0;border:3px solid transparent}
+.btn-attend-in{background:#1D9E75;color:#fff;border-color:#1D9E75}
+.btn-attend-in:active{transform:scale(.96);background:#157a5a}
+.btn-attend-in.selected{box-shadow:0 0 0 4px rgba(29,158,117,.3);border-color:#0f6e56}
+.btn-attend-out{background:#E76F51;color:#fff;border-color:#E76F51}
+.btn-attend-out:active{transform:scale(.96);background:#c45a3e}
+.btn-attend-out.selected{box-shadow:0 0 0 4px rgba(231,111,81,.3);border-color:#b84f35}
 .attend-btn-icon{font-size:36px;line-height:1}
 .attend-btn-label{font-size:15px;font-weight:700}
+.attend-mode-hint{font-size:13px;color:var(--text-sub);text-align:center;margin-bottom:10px;min-height:20px}
 /* 集計アコーディオン */
 .acc-row{margin-bottom:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .acc-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--surface);-webkit-user-select:none;user-select:none;transition:background .15s}
@@ -200,10 +203,20 @@ textarea{resize:vertical;min-height:70px}
 
   <!-- 出勤 -->
   <div id="page-attend" class="page active">
-    <div class="card">
-      <div class="section-label">出勤 / 退勤</div>
-      <div class="field" style="margin-bottom:0">
-        <label>対象者（複数選択可）</label>
+    <div class="attend-btn-row">
+      <button class="btn-attend-in" id="btn-in" onclick="selectAttendMode('in')">
+        <span class="attend-btn-icon">🌅</span>
+        <span class="attend-btn-label">出勤</span>
+      </button>
+      <button class="btn-attend-out" id="btn-out" onclick="selectAttendMode('out')">
+        <span class="attend-btn-icon">🌇</span>
+        <span class="attend-btn-label">退勤</span>
+      </button>
+    </div>
+    <div class="attend-mode-hint" id="attend-mode-hint">出勤または退勤を選択してください</div>
+    <div class="card" id="attend-member-card" style="display:none">
+      <div class="section-label" id="attend-member-label">対象者を選択</div>
+      <div class="field" style="margin-bottom:12px">
         <div class="mem-dropdown-wrap">
           <div class="mem-dropdown-trigger" id="att-mem-trigger" onclick="toggleMemDropdown('att')">
             <span class="mem-dropdown-label placeholder" id="att-mem-label">タップして選択</span>
@@ -212,16 +225,7 @@ textarea{resize:vertical;min-height:70px}
           <div class="mem-dropdown-list" id="att-mem-list"></div>
         </div>
       </div>
-    </div>
-    <div class="attend-btn-row">
-      <button class="btn-attend-in" onclick="saveAttend('in')">
-        <span class="attend-btn-icon">🌅</span>
-        <span class="attend-btn-label">出勤</span>
-      </button>
-      <button class="btn-attend-out" onclick="saveAttend('out')">
-        <span class="attend-btn-icon">🌇</span>
-        <span class="attend-btn-label">退勤</span>
-      </button>
+      <button class="btn btn-primary" id="attend-confirm-btn" onclick="confirmAttend()">確定する</button>
     </div>
     <div class="card">
       <div class="section-label">本日の出勤状況</div>
@@ -237,16 +241,7 @@ textarea{resize:vertical;min-height:70px}
         <label>作業日</label>
         <input type="date" id="rec-date" onchange="onRecDateChange()">
       </div>
-      <div class="field">
-        <label>作業者（出勤済みのみ）</label>
-        <div class="mem-dropdown-wrap">
-          <div class="mem-dropdown-trigger" id="rec-mem-trigger" onclick="toggleMemDropdown('rec')">
-            <span class="mem-dropdown-label placeholder" id="rec-mem-label">タップして選択</span>
-            <span class="mem-dropdown-arrow" id="rec-mem-arrow">▼</span>
-          </div>
-          <div class="mem-dropdown-list" id="rec-mem-list"></div>
-        </div>
-      </div>
+      <!-- 作業者はスプレッドシート側で同日出勤者として管理 -->
       <!-- 作業時間は退勤時刻から自動セット（hidden） -->
       <input type="hidden" id="rec-start" value="09:00">
       <input type="hidden" id="rec-end">
@@ -496,6 +491,13 @@ function buildMemDropdown(ns) {
       .filter(a => a.date === recDate)
       .map(a => a.member));
     members = state.members.filter(m => attendedToday.has(m));
+  } else if (ns === 'att' && currentAttendMode === 'out') {
+    // 退勤モード：本日出勤済みの人のみ表示
+    const today = getTodayJST();
+    const attendedToday = new Set((state.attendances || [])
+      .filter(a => a.date === today && a.time) // 出勤時刻がある人
+      .map(a => a.member));
+    members = state.members.filter(m => attendedToday.has(m));
     if (!members.length) {
       list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-hint)">本日の出勤記録がありません</div>';
       updateMemLabel(ns);
@@ -621,7 +623,6 @@ function showPage(id, btn) {
   if (id === 'members') renderMembers();
   if (id === 'record') {
     document.getElementById('rec-date').value = getTodayJST();
-    renderMemberGrid('rec-member-grid', []);
     document.getElementById('rec-start').value = '09:00';
     setRecEndTimeNow();
   }
@@ -689,13 +690,7 @@ function closeMemDetail() {
 }
 
 function onRecDateChange() {
-  // 作業日が変わったら出勤済みメンバーを再構築・開始時刻を再セット
-  const list = document.getElementById('rec-mem-list');
-  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
-  const label = document.getElementById('rec-mem-label');
-  if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
-  document.getElementById('rec-mem-trigger')?.classList.remove('open');
-  document.getElementById('rec-mem-arrow')?.classList.remove('open');
+  // 作業日が変わったら開始時刻をリセット
   document.getElementById('rec-start').value = '09:00';
 }
 
@@ -782,10 +777,12 @@ function setRecEndTimeNow() {
 }
 
 function saveRecord() {
-  const members = getSelectedMembers('rec');
-  if (!members.length) { toast('⚠️ 作業者を選択してください'); return; }
   // 作業日はrec-dateから取得（デフォルト当日・手動変更可）
   const date = document.getElementById('rec-date').value || getTodayJST();
+  // 同日の出勤者を作業者として自動セット
+  const members = (state.attendances || [])
+    .filter(a => a.date === date && a.time)
+    .map(a => a.member);
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
   // 開始・終了時刻は退勤時に自動セット（未入力でも保存可）
@@ -805,7 +802,6 @@ function saveRecord() {
   document.getElementById('prog-num').textContent = '50%';
   document.getElementById('rec-start').value = '09:00';
   setRecEndTimeNow();
-  renderMemberGrid('rec-member-grid', []);
   if (gasUrl) {
     pushRecordToCloud(rec);
   } else {
@@ -1176,7 +1172,7 @@ function refreshCurrentPage() {
   if (cur === 'stats') renderStats();
   if (cur === 'members') renderMembers();
   if (cur === 'attend') { renderAttendStatus(); }
-  if (cur === 'record') renderMemberGrid('rec-member-grid', []);
+  // recordページは再描画不要（フォームのみ）
 }
 
 async function testConnection() {
@@ -1191,8 +1187,51 @@ async function testConnection() {
 }
 
 // ---- 出勤機能 ----
+let currentAttendMode = null; // 'in' or 'out'
+
 function initAttendPage() {
-  renderMemberGrid('att-member-grid', []);
+  currentAttendMode = null;
+  // ボタンのselected状態リセット
+  document.getElementById('btn-in')?.classList.remove('selected');
+  document.getElementById('btn-out')?.classList.remove('selected');
+  // 対象者カードを非表示
+  const card = document.getElementById('attend-member-card');
+  if (card) card.style.display = 'none';
+  // ヒントテキストリセット
+  const hint = document.getElementById('attend-mode-hint');
+  if (hint) hint.textContent = '出勤または退勤を選択してください';
+  // プルダウンリセット
+  const list = document.getElementById('att-mem-list');
+  const label = document.getElementById('att-mem-label');
+  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
+  if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
+}
+
+function selectAttendMode(mode) {
+  currentAttendMode = mode;
+  // ボタンのselected状態切替
+  document.getElementById('btn-in')?.classList.toggle('selected', mode === 'in');
+  document.getElementById('btn-out')?.classList.toggle('selected', mode === 'out');
+  // ヒントテキスト更新
+  const hint = document.getElementById('attend-mode-hint');
+  if (hint) hint.textContent = mode === 'in' ? '🌅 出勤する対象者を選択してください' : '🌇 退勤する対象者を選択してください';
+  // 対象者カードを表示
+  const card = document.getElementById('attend-member-card');
+  if (card) card.style.display = 'block';
+  const labelEl = document.getElementById('attend-member-label');
+  if (labelEl) labelEl.textContent = mode === 'in' ? '出勤者を選択（複数可）' : '退勤者を選択（複数可）';
+  // プルダウンリセット＆再構築
+  const list = document.getElementById('att-mem-list');
+  const memLabel = document.getElementById('att-mem-label');
+  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
+  if (memLabel) { memLabel.textContent = 'タップして選択'; memLabel.classList.add('placeholder'); }
+  document.getElementById('att-mem-trigger')?.classList.remove('open');
+  document.getElementById('att-mem-arrow')?.classList.remove('open');
+}
+
+function confirmAttend() {
+  if (!currentAttendMode) { toast('⚠️ 出勤または退勤を選択してください'); return; }
+  saveAttend(currentAttendMode);
 }
 
 function getTimeJST() {
@@ -1326,7 +1365,35 @@ function applyAttendTime() {
 async function pushAttendToCloud() {
   if (!gasUrl) return;
   try {
-    await gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances || []) });
+    // クラウドの最新データを取得してマージ（leaveTimeなど既存データを保護）
+    const cloudData = await gasGet({ action: 'getAll' });
+    const cloudAttends = cloudData.attendances || [];
+
+    // ローカルのattendancesをベースに、クラウドにしかないデータを保持
+    const merged = [...(state.attendances || [])];
+    cloudAttends.forEach(ca => {
+      const localIdx = merged.findIndex(a =>
+        String(a.id) === String(ca.id) ||
+        (a.date === ca.date && a.member === ca.member)
+      );
+      if (localIdx >= 0) {
+        // クラウドにleaveTimeがあってローカルにない場合は保持
+        if (ca.leaveTime && !merged[localIdx].leaveTime) {
+          merged[localIdx].leaveTime = ca.leaveTime;
+        }
+        // クラウドにtimeがあってローカルにない場合も保持
+        if (ca.time && !merged[localIdx].time) {
+          merged[localIdx].time = ca.time;
+        }
+      } else {
+        // クラウドにしかないレコードはそのまま追加
+        merged.push(ca);
+      }
+    });
+
+    state.attendances = merged;
+    save();
+    await gasGet({ action: 'syncAttend', data: JSON.stringify(merged) });
   } catch(e) { console.warn('attend sync failed', e); }
 }
 
