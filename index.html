@@ -840,11 +840,7 @@ function autoRegisterAttendFromRecord(date, members) {
 
   if (added) {
     save();
-    // クラウドにも送信
-    if (gasUrl) {
-      gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances) })
-        .catch(e => console.warn('出勤自動登録の送信失敗', e));
-    }
+    if (gasUrl) pushAttendToCloud();
   }
 }
 
@@ -1344,10 +1340,10 @@ function saveAttend(type) {
   renderAttendStatus();
   initAttendPage();
 
-  // クラウドに即送信（syncAllは呼ばずに出勤データのみ送信）
+  // クラウドに即送信
   if (gasUrl) {
     toast(type === 'in' ? '⏳ 出勤を記録中...' : '⏳ 退勤を記録中...');
-    gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances || []) })
+    pushAttendToCloud()
       .then(() => toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました'))
       .catch(() => toast('⚠️ 送信に失敗しました'));
   } else {
@@ -1427,35 +1423,7 @@ function applyAttendTime() {
 async function pushAttendToCloud() {
   if (!gasUrl) return;
   try {
-    // クラウドの最新データを取得してマージ（leaveTimeなど既存データを保護）
-    const cloudData = await gasGet({ action: 'getAll' });
-    const cloudAttends = cloudData.attendances || [];
-
-    // ローカルのattendancesをベースに、クラウドにしかないデータを保持
-    const merged = [...(state.attendances || [])];
-    cloudAttends.forEach(ca => {
-      const localIdx = merged.findIndex(a =>
-        String(a.id) === String(ca.id) ||
-        (a.date === ca.date && a.member === ca.member)
-      );
-      if (localIdx >= 0) {
-        // クラウドにleaveTimeがあってローカルにない場合は保持
-        if (ca.leaveTime && !merged[localIdx].leaveTime) {
-          merged[localIdx].leaveTime = ca.leaveTime;
-        }
-        // クラウドにtimeがあってローカルにない場合も保持
-        if (ca.time && !merged[localIdx].time) {
-          merged[localIdx].time = ca.time;
-        }
-      } else {
-        // クラウドにしかないレコードはそのまま追加
-        merged.push(ca);
-      }
-    });
-
-    state.attendances = merged;
-    save();
-    await gasGet({ action: 'syncAttend', data: JSON.stringify(merged) });
+    await gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances || []) });
   } catch(e) { console.warn('attend sync failed', e); }
 }
 
