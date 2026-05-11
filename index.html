@@ -783,6 +783,10 @@ function saveRecord() {
   const members = (state.attendances || [])
     .filter(a => a.date === date && a.time)
     .map(a => a.member);
+
+  // 出勤記録のないメンバーがいれば自動で出勤登録（出勤押し忘れ対応）
+  // ※記録ページでは作業者プルダウンがないため、同日出勤済みのメンバーを全員対象とする
+  // 出勤記録が0件の場合はスキップ（誰も出勤していない日は登録しない）
   const start = document.getElementById('rec-start').value;
   const end = document.getElementById('rec-end').value;
   // 開始・終了時刻は退勤時に自動セット（未入力でも保存可）
@@ -802,11 +806,45 @@ function saveRecord() {
   document.getElementById('prog-num').textContent = '50%';
   document.getElementById('rec-start').value = '09:00';
   setRecEndTimeNow();
+  // 出勤押し忘れ対応：記録保存時に同日出勤記録がない場合は自動登録
+  autoRegisterAttendFromRecord(date, members);
+
   if (gasUrl) {
     pushRecordToCloud(rec);
   } else {
     state.records.unshift(rec); save();
     toast('✅ 記録を保存しました');
+  }
+}
+
+function autoRegisterAttendFromRecord(date, members) {
+  if (!date || !members || !members.length) return;
+  if (!state.attendances) state.attendances = [];
+
+  let added = false;
+  members.forEach(m => {
+    const exists = state.attendances.find(a => a.date === date && a.member === m);
+    if (!exists) {
+      // 出勤記録がない場合は開始時刻を rec-start から取得
+      const startTime = document.getElementById('rec-start')?.value || '09:00';
+      state.attendances.push({
+        id: Date.now() + Math.random(),
+        date,
+        member: m,
+        time: startTime,
+        leaveTime: ''
+      });
+      added = true;
+    }
+  });
+
+  if (added) {
+    save();
+    // クラウドにも送信
+    if (gasUrl) {
+      gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances) })
+        .catch(e => console.warn('出勤自動登録の送信失敗', e));
+    }
   }
 }
 
@@ -1124,7 +1162,24 @@ async function syncAll() {
       state.members = data.members;
     }
     if (data.attendances) {
-      state.attendances = data.attendances;
+      // クラウドと手元の出勤データをマージ（どちらかにしかないデータを保持）
+      const cloud = data.attendances;
+      const local = state.attendances || [];
+      const merged = [...local];
+      cloud.forEach(ca => {
+        const exists = merged.findIndex(a =>
+          String(a.id) === String(ca.id) ||
+          (a.date === ca.date && a.member === ca.member)
+        );
+        if (exists >= 0) {
+          // クラウドにleaveTimeがあってローカルにない場合は保持
+          if (ca.leaveTime && !merged[exists].leaveTime) merged[exists].leaveTime = ca.leaveTime;
+          if (ca.time && !merged[exists].time) merged[exists].time = ca.time;
+        } else {
+          merged.push(ca);
+        }
+      });
+      state.attendances = merged;
     }
     save();
     toast('☁️ 同期完了');
@@ -1279,8 +1334,6 @@ function saveAttend(type) {
     }
   });
   save();
-  toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました');
-
   // プルダウンリセット
   const list = document.getElementById('att-mem-list');
   const label = document.getElementById('att-mem-label');
@@ -1288,9 +1341,18 @@ function saveAttend(type) {
   if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
   document.getElementById('att-mem-trigger')?.classList.remove('open');
   document.getElementById('att-mem-arrow')?.classList.remove('open');
-
   renderAttendStatus();
-  if (gasUrl) pushAttendToCloud();
+  initAttendPage();
+
+  // クラウドに即送信（syncAllは呼ばずに出勤データのみ送信）
+  if (gasUrl) {
+    toast(type === 'in' ? '⏳ 出勤を記録中...' : '⏳ 退勤を記録中...');
+    gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances || []) })
+      .then(() => toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました'))
+      .catch(() => toast('⚠️ 送信に失敗しました'));
+  } else {
+    toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました');
+  }
 }
 
 function renderAttendStatus() {
