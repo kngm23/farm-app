@@ -1112,7 +1112,17 @@ function exportCSV() {
 
 // ---- Cloud ----
 async function gasGet(params) {
-  const res = await fetch(gasUrl + '?' + new URLSearchParams(params).toString());
+  const urlWithParams = gasUrl + '?' + new URLSearchParams(params).toString();
+  // URL長が2000文字を超える場合はPOSTで送信
+  if (urlWithParams.length > 2000) {
+    const res = await fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params).toString()
+    });
+    return res.json();
+  }
+  const res = await fetch(urlWithParams);
   return res.json();
 }
 
