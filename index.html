@@ -667,7 +667,13 @@ function renderMembers() {
     return;
   }
   el.innerHTML = state.members.map(m => {
-    const h = state.records.reduce((s, r) => s + (memArr(r).includes(m) ? calcH(r.start, r.end) : 0), 0);
+    const h = state.records.reduce((s, r) => {
+      if (!r.date) return s;
+      const inMembers = r.members && r.members.length > 0
+        ? r.members.includes(m)
+        : (state.attendances || []).some(a => a.date === r.date && a.member === m && a.time);
+      return s + (inMembers ? calcH(r.start, r.end) : 0);
+    }, 0);
     const safe = m.replace(/'/g, "\'");
     return `<div class="mem-item mem-item-tap" onclick="openMemDetail('${safe}')">
       <div class="mem-left">
@@ -706,7 +712,11 @@ function toggleMonthDetail(id) {
 
 function renderMemDetail(name) {
   const el = document.getElementById('mem-detail-content');
-  const recs = state.records.filter(r => memArr(r).includes(name));
+  const recs = state.records.filter(r => {
+    if (!r.date) return false;
+    if (r.members && r.members.length > 0) return r.members.includes(name);
+    return (state.attendances || []).some(a => a.date === r.date && a.member === name && a.time);
+  });
   const totalH = recs.reduce((s, r) => s + calcH(r.start, r.end), 0);
 
   // 月別集計: { 'yyyy-mm': { total: h, days: [{date, cat, h}] } }
@@ -1006,25 +1016,41 @@ function renderStats() {
 
   // 1人あたり平均稼働時間
   let totalAll = 0;
+  const activeMembers = new Set();
   state.records.forEach(r => {
-    const h = calcH(r.start, r.end), cnt = memArr(r).length;
-    if (cnt > 0) totalAll += h * cnt;
+    const h = calcH(r.start, r.end);
+    if (h <= 0) return;
+    const dayMembers = r.members && r.members.length > 0
+      ? r.members
+      : (state.attendances || []).filter(a => a.date === r.date && a.time).map(a => a.member);
+    if (dayMembers.length > 0) {
+      totalAll += h * dayMembers.length;
+      dayMembers.forEach(m => activeMembers.add(m));
+    } else {
+      totalAll += h;
+    }
   });
-  const activeMembers = new Set(state.records.flatMap(r => memArr(r)));
   const avgHours = activeMembers.size > 0 ? totalAll / activeMembers.size : 0;
   document.getElementById('st-days').textContent = days;
   document.getElementById('st-hours').textContent = fmtH(avgHours);
   document.getElementById('st-hours-label').textContent = '1人あたり平均稼働時間';
 
   // ---- メンバー別稼働時間（タップで月別展開）----
-  // メンバーごとの月別集計
-  const mhTotal = {}; // メンバー → 総時間
-  const mhMonth = {}; // メンバー → { 'yyyy-mm': 時間 }
+  // メンバーごとの月別集計（出勤記録から参加メンバーを特定）
+  const mhTotal = {};
+  const mhMonth = {};
   state.members.forEach(m => { mhTotal[m] = 0; mhMonth[m] = {}; });
+
   state.records.forEach(r => {
     const h = calcH(r.start, r.end);
-    const ym = r.date ? r.date.slice(0, 7) : ''; // 'yyyy-mm'
-    memArr(r).forEach(m => {
+    if (h <= 0) return;
+    const ym = r.date ? r.date.slice(0, 7) : '';
+    // 同日の出勤者を参加メンバーとして使用
+    const dayMembers = r.members && r.members.length > 0
+      ? r.members
+      : (state.attendances || []).filter(a => a.date === r.date && a.time).map(a => a.member);
+    dayMembers.forEach(m => {
+      if (!state.members.includes(m)) return;
       mhTotal[m] = (mhTotal[m] || 0) + h;
       if (ym) {
         mhMonth[m] = mhMonth[m] || {};
@@ -1065,23 +1091,24 @@ function renderStats() {
   document.getElementById('stats-mem').innerHTML = memHtml || '<p style="color:var(--text-hint);font-size:14px">データがありません</p>';
 
   // ---- カテゴリ別（タップで担当者別時間展開）----
-  const catTotal = {}; // カテゴリ → 総時間（延べ）
-  const catMem = {};   // カテゴリ → { メンバー名: 時間 }
-  state.records.forEach(r => {
-    const h = calcH(r.start, r.end);
-    const cat = r.category;
-    const cnt = memArr(r).length || 1;
-    catTotal[cat] = (catTotal[cat] || 0) + h * cnt;
-    catMem[cat] = catMem[cat] || {};
-    memArr(r).forEach(m => {
-      catMem[cat][m] = (catMem[cat][m] || 0) + h;
-    });
-  });
-
-  // カテゴリ別平均（総時間 ÷ 延べ人数）
+  const catTotal = {};
+  const catMem = {};
   const catCnt = {};
   state.records.forEach(r => {
-    catCnt[r.category] = (catCnt[r.category] || 0) + (memArr(r).length || 1);
+    const h = calcH(r.start, r.end);
+    if (h <= 0) return;
+    const cat = r.category;
+    // 出勤記録からメンバーを取得
+    const dayMembers = r.members && r.members.length > 0
+      ? r.members
+      : (state.attendances || []).filter(a => a.date === r.date && a.time).map(a => a.member);
+    const cnt = dayMembers.length || 1;
+    catTotal[cat] = (catTotal[cat] || 0) + h * cnt;
+    catCnt[cat] = (catCnt[cat] || 0) + cnt;
+    catMem[cat] = catMem[cat] || {};
+    dayMembers.forEach(m => {
+      catMem[cat][m] = (catMem[cat][m] || 0) + h;
+    });
   });
   const catAvg = {};
   Object.keys(catTotal).forEach(c => {
