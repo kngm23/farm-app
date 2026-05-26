@@ -258,13 +258,9 @@ textarea{resize:vertical;min-height:70px}
         <label>作業内容（詳細）</label>
         <textarea id="rec-detail" placeholder="具体的な内容を入力..."></textarea>
       </div>
-      <div class="field">
-        <label>進捗状況</label>
-        <div class="progress-row">
-          <input type="range" min="0" max="100" step="5" value="50" id="rec-prog" oninput="document.getElementById('prog-num').textContent=this.value+'%'">
-          <span class="prog-val" id="prog-num">50%</span>
-        </div>
-      </div>
+      <!-- 進捗は非表示（100%固定） -->
+      <input type="hidden" id="rec-prog" value="100">
+      <span id="prog-num" style="display:none">100%</span>
       <div class="field" style="margin-bottom:0">
         <label>メモ・天気など</label>
         <textarea id="rec-memo" placeholder="天気・気温・備考..." style="min-height:50px"></textarea>
@@ -492,12 +488,19 @@ function buildMemDropdown(ns) {
       .map(a => a.member));
     members = state.members.filter(m => attendedToday.has(m));
   } else if (ns === 'att' && currentAttendMode === 'out') {
-    // 退勤モード：本日出勤済みの人のみ表示
+    // 退勤モード：本日出勤済み・退勤未済の人のみ表示
     const today = getTodayJST();
     const attendedToday = new Set((state.attendances || [])
-      .filter(a => a.date === today && a.time) // 出勤時刻がある人
+      .filter(a => a.date === today && a.time && !a.leaveTime)
       .map(a => a.member));
     members = state.members.filter(m => attendedToday.has(m));
+  } else if (ns === 'att' && currentAttendMode === 'in') {
+    // 出勤モード：本日まだ出勤していない人のみ表示
+    const today = getTodayJST();
+    const attendedToday = new Set((state.attendances || [])
+      .filter(a => a.date === today && a.time)
+      .map(a => a.member));
+    members = state.members.filter(m => !attendedToday.has(m));
     if (!members.length) {
       list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-hint)">本日の出勤記録がありません</div>';
       updateMemLabel(ns);
@@ -623,7 +626,7 @@ function showPage(id, btn) {
   if (id === 'members') renderMembers();
   if (id === 'record') {
     document.getElementById('rec-date').value = getTodayJST();
-    document.getElementById('rec-start').value = '09:00';
+    setRecStartFromAttend();
     setRecEndTimeNow();
   }
   if (id === 'settings') document.getElementById('gas-url').value = gasUrl;
@@ -767,6 +770,20 @@ function renderMemDetail(name) {
 }
 
 // ---- Save Record ----
+function setRecStartFromAttend() {
+  // 当日最初の出勤時刻を開始時間に自動セット
+  const date = document.getElementById('rec-date')?.value || getTodayJST();
+  const todayAttends = (state.attendances || [])
+    .filter(a => a.date === date && a.time)
+    .map(a => a.time)
+    .sort();
+  if (todayAttends.length > 0) {
+    document.getElementById('rec-start').value = todayAttends[0];
+  } else {
+    document.getElementById('rec-start').value = '09:00';
+  }
+}
+
 function setRecEndTimeNow() {
   // 現在時刻（JST）を終了時間にセット
   const now = new Date();
@@ -802,9 +819,8 @@ function saveRecord() {
   document.getElementById('rec-date').value = getTodayJST();
   document.getElementById('rec-detail').value = '';
   document.getElementById('rec-memo').value = '';
-  document.getElementById('rec-prog').value = 50;
-  document.getElementById('prog-num').textContent = '50%';
-  document.getElementById('rec-start').value = '09:00';
+  document.getElementById('rec-prog').value = 100;
+  setRecStartFromAttend();
   setRecEndTimeNow();
   // 出勤押し忘れ対応：記録保存時に同日出勤記録がない場合は自動登録
   autoRegisterAttendFromRecord(date, members);
