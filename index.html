@@ -153,6 +153,28 @@ textarea{resize:vertical;min-height:70px}
 .badge-out{background:#F1F5F9;color:#5F5E5A}
 .badge-working{background:var(--green-pale);color:var(--green)}
 /* 出勤・退勤ボタン横並び */
+/* 勤怠タイル（ぴよログ式） */
+.attend-summary{display:flex;gap:10px;margin-bottom:12px}
+.attend-summary-box{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center}
+.attend-summary-num{font-size:24px;font-weight:700;line-height:1.1}
+.attend-summary-label{font-size:11px;color:var(--text-sub);margin-top:2px}
+.attend-summary-box.in .attend-summary-num{color:#1D9E75}
+.attend-summary-box.work .attend-summary-num{color:#E76F51}
+.attend-summary-box.out .attend-summary-num{color:var(--text-sub)}
+.attend-tile-hint{font-size:12px;color:var(--text-hint);text-align:center;margin-bottom:10px}
+.attend-tiles{display:flex;flex-direction:column;gap:10px}
+.attend-tile{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;border:2px solid var(--border);background:var(--surface);cursor:pointer;-webkit-user-select:none;user-select:none;transition:all .15s;min-height:64px}
+.attend-tile:active{transform:scale(.98)}
+.attend-tile.status-none{background:var(--surface)}
+.attend-tile.status-in{background:#E8F7F1;border-color:#1D9E75}
+.attend-tile.status-out{background:#F8F8F8;border-color:var(--border);opacity:.85}
+.attend-tile-avatar{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0;background:var(--green-pale);color:var(--green)}
+.attend-tile.status-in .attend-tile-avatar{background:#1D9E75;color:#fff}
+.attend-tile-info{flex:1;min-width:0}
+.attend-tile-name{font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px}
+.attend-tile-status{font-size:13px;color:var(--text-sub)}
+.attend-tile.status-in .attend-tile-status{color:#0F6E56;font-weight:600}
+.attend-tile-badge{font-size:22px;flex-shrink:0}
 .attend-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .btn-attend-in,.btn-attend-out{aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;padding:0;border:3px solid transparent}
 .btn-attend-in{background:#1D9E75;color:#fff;border-color:#1D9E75}
@@ -163,7 +185,6 @@ textarea{resize:vertical;min-height:70px}
 .btn-attend-out.selected{box-shadow:0 0 0 4px rgba(231,111,81,.3);border-color:#b84f35}
 .attend-btn-icon{font-size:36px;line-height:1}
 .attend-btn-label{font-size:15px;font-weight:700}
-.attend-mode-hint{font-size:13px;color:var(--text-sub);text-align:center;margin-bottom:10px;min-height:20px}
 /* 集計アコーディオン */
 .acc-row{margin-bottom:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .acc-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--surface);-webkit-user-select:none;user-select:none;transition:background .15s}
@@ -203,34 +224,9 @@ textarea{resize:vertical;min-height:70px}
 
   <!-- 出勤 -->
   <div id="page-attend" class="page active">
-    <div class="attend-btn-row">
-      <button class="btn-attend-in" id="btn-in" onclick="selectAttendMode('in')">
-        <span class="attend-btn-icon">🌅</span>
-        <span class="attend-btn-label">出勤</span>
-      </button>
-      <button class="btn-attend-out" id="btn-out" onclick="selectAttendMode('out')">
-        <span class="attend-btn-icon">🌇</span>
-        <span class="attend-btn-label">退勤</span>
-      </button>
-    </div>
-    <div class="attend-mode-hint" id="attend-mode-hint">出勤または退勤を選択してください</div>
-    <div class="card" id="attend-member-card" style="display:none">
-      <div class="section-label" id="attend-member-label">対象者を選択</div>
-      <div class="field" style="margin-bottom:12px">
-        <div class="mem-dropdown-wrap">
-          <div class="mem-dropdown-trigger" id="att-mem-trigger" onclick="toggleMemDropdown('att')">
-            <span class="mem-dropdown-label placeholder" id="att-mem-label">タップして選択</span>
-            <span class="mem-dropdown-arrow" id="att-mem-arrow">▼</span>
-          </div>
-          <div class="mem-dropdown-list" id="att-mem-list"></div>
-        </div>
-      </div>
-      <button class="btn btn-primary" id="attend-confirm-btn" onclick="confirmAttend()">確定する</button>
-    </div>
-    <div class="card">
-      <div class="section-label">本日の出勤状況</div>
-      <div id="attend-status-list"><p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">読み込み中...</p></div>
-    </div>
+    <div class="attend-summary" id="attend-summary"></div>
+    <div class="attend-tile-hint">タップで出勤、もう一度タップで退勤</div>
+    <div id="attend-tiles" class="attend-tiles"></div>
   </div>
 
   <!-- 記録入力 -->
@@ -619,7 +615,7 @@ function showPage(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
-  if (id === 'attend') { renderMemberGrid('att-member-grid', []); renderAttendStatus(); initAttendPage(); }
+  if (id === 'attend') { initAttendPage(); }
   if (id === 'log') { renderLog(); populateFilterMembers(); }
   if (id === 'calendar') renderCalendar();
   if (id === 'stats') renderStats();
@@ -1275,7 +1271,7 @@ function refreshCurrentPage() {
   if (cur === 'calendar') renderCalendar();
   if (cur === 'stats') renderStats();
   if (cur === 'members') renderMembers();
-  if (cur === 'attend') { renderAttendStatus(); }
+  if (cur === 'attend') { renderAttendTiles(); }
   // recordページは再描画不要（フォームのみ）
 }
 
@@ -1294,48 +1290,7 @@ async function testConnection() {
 let currentAttendMode = null; // 'in' or 'out'
 
 function initAttendPage() {
-  currentAttendMode = null;
-  // ボタンのselected状態リセット
-  document.getElementById('btn-in')?.classList.remove('selected');
-  document.getElementById('btn-out')?.classList.remove('selected');
-  // 対象者カードを非表示
-  const card = document.getElementById('attend-member-card');
-  if (card) card.style.display = 'none';
-  // ヒントテキストリセット
-  const hint = document.getElementById('attend-mode-hint');
-  if (hint) hint.textContent = '出勤または退勤を選択してください';
-  // プルダウンリセット
-  const list = document.getElementById('att-mem-list');
-  const label = document.getElementById('att-mem-label');
-  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
-  if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
-}
-
-function selectAttendMode(mode) {
-  currentAttendMode = mode;
-  // ボタンのselected状態切替
-  document.getElementById('btn-in')?.classList.toggle('selected', mode === 'in');
-  document.getElementById('btn-out')?.classList.toggle('selected', mode === 'out');
-  // ヒントテキスト更新
-  const hint = document.getElementById('attend-mode-hint');
-  if (hint) hint.textContent = mode === 'in' ? '🌅 出勤する対象者を選択してください' : '🌇 退勤する対象者を選択してください';
-  // 対象者カードを表示
-  const card = document.getElementById('attend-member-card');
-  if (card) card.style.display = 'block';
-  const labelEl = document.getElementById('attend-member-label');
-  if (labelEl) labelEl.textContent = mode === 'in' ? '出勤者を選択（複数可）' : '退勤者を選択（複数可）';
-  // プルダウンリセット＆再構築
-  const list = document.getElementById('att-mem-list');
-  const memLabel = document.getElementById('att-mem-label');
-  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
-  if (memLabel) { memLabel.textContent = 'タップして選択'; memLabel.classList.add('placeholder'); }
-  document.getElementById('att-mem-trigger')?.classList.remove('open');
-  document.getElementById('att-mem-arrow')?.classList.remove('open');
-}
-
-function confirmAttend() {
-  if (!currentAttendMode) { toast('⚠️ 出勤または退勤を選択してください'); return; }
-  saveAttend(currentAttendMode);
+  renderAttendTiles();
 }
 
 function getTimeJST() {
@@ -1344,109 +1299,124 @@ function getTimeJST() {
   return String(jst.getUTCHours()).padStart(2,'0') + ':' + String(jst.getUTCMinutes()).padStart(2,'0');
 }
 
-function saveAttend(type) {
-  // type: 'in'=出勤 / 'out'=退勤
-  const date = getTodayJST(); // 日付は自動取得
-  const time = getTimeJST();  // 時刻は自動取得
-  const members = getSelectedMembers('att');
-  if (!members.length) { toast('⚠️ 対象者を選択してください'); return; }
-
-  if (!state.attendances) state.attendances = [];
-  members.forEach(m => {
-    const existing = state.attendances.findIndex(a => a.date === date && a.member === m);
-    if (type === 'in') {
-      // 出勤：既存があれば上書き、なければ新規
-      if (existing >= 0) {
-        state.attendances[existing].time = time;
-        state.attendances[existing].leaveTime = '';
-      } else {
-        state.attendances.push({
-          id: Date.now() + Math.random(),
-          date, member: m, time, leaveTime: ''
-        });
-      }
-    } else {
-      // 退勤：既存があれば退勤時刻を記録
-      if (existing >= 0) {
-        state.attendances[existing].leaveTime = time;
-        // 記録ページの終了時刻・開始時刻に自動セット
-        document.getElementById('rec-end').value = time;
-        document.getElementById('rec-start').value = state.attendances[existing].time || '09:00';
-      } else {
-        // 出勤記録なしで退勤の場合も記録
-        state.attendances.push({
-          id: Date.now() + Math.random(),
-          date, member: m, time: '', leaveTime: time
-        });
-        document.getElementById('rec-end').value = time;
-      }
-    }
-  });
-  save();
-  // プルダウンリセット
-  const list = document.getElementById('att-mem-list');
-  const label = document.getElementById('att-mem-label');
-  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
-  if (label) { label.textContent = 'タップして選択'; label.classList.add('placeholder'); }
-  document.getElementById('att-mem-trigger')?.classList.remove('open');
-  document.getElementById('att-mem-arrow')?.classList.remove('open');
-  renderAttendStatus();
-  initAttendPage();
-
-  // クラウドに即送信
-  if (gasUrl) {
-    toast(type === 'in' ? '⏳ 出勤を記録中...' : '⏳ 退勤を記録中...');
-    pushAttendToCloud()
-      .then(() => toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました'))
-      .catch(() => toast('⚠️ 送信に失敗しました'));
-  } else {
-    toast(type === 'in' ? '🌅 出勤を記録しました' : '🌇 退勤を記録しました');
-  }
+// 経過時間を計算（HH:MM形式の開始時刻から現在まで）
+function calcElapsed(startTime) {
+  if (!startTime) return '';
+  const now = getTimeJST();
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [nh, nm] = now.split(':').map(Number);
+  let mins = (nh * 60 + nm) - (sh * 60 + sm);
+  if (mins < 0) return '';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return m + '分経過';
+  if (m === 0) return h + '時間経過';
+  return h + '時間' + m + '分経過';
 }
 
-function renderAttendStatus() {
-  const el = document.getElementById('attend-status-list');
+// タイル描画
+function renderAttendTiles() {
+  const el = document.getElementById('attend-tiles');
+  const summaryEl = document.getElementById('attend-summary');
   if (!el) return;
+
+  if (!state.members.length) {
+    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:20px 0">メンバーが登録されていません</p>';
+    if (summaryEl) summaryEl.innerHTML = '';
+    return;
+  }
+
   const today = getTodayJST();
   const todayAttends = (state.attendances || []).filter(a => a.date === today);
 
-  if (!state.members.length) {
-    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">メンバーが登録されていません</p>';
-    return;
+  // サマリー集計
+  let cntIn = 0, cntWork = 0, cntOut = 0;
+  state.members.forEach(m => {
+    const att = todayAttends.find(a => a.member === m);
+    if (!att) return;
+    if (att.leaveTime) cntOut++;
+    else if (att.time) { cntIn++; cntWork++; }
+  });
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="attend-summary-box in"><div class="attend-summary-num">${cntWork}</div><div class="attend-summary-label">出勤中</div></div>
+      <div class="attend-summary-box out"><div class="attend-summary-num">${cntOut}</div><div class="attend-summary-label">退勤済</div></div>
+      <div class="attend-summary-box"><div class="attend-summary-num">${state.members.length - cntWork - cntOut}</div><div class="attend-summary-label">未出勤</div></div>
+    `;
   }
 
-  // 出勤または退勤記録がある人のみ表示
-  const attendedList = state.members
-    .map(m => ({ m, att: todayAttends.find(a => a.member === m) }))
-    .filter(({ att }) => att);
-
-  if (!attendedList.length) {
-    el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:16px 0">本日の出勤記録はありません</p>';
-    return;
-  }
-
-  el.innerHTML = attendedList.map(({ m, att }) => {
-    const hasIn = att.time;
-    const hasOut = att.leaveTime;
-    let badge, timeText;
-    if (hasOut) {
-      badge = '<span class="attend-badge badge-out">✅ 退勤済</span>';
-      timeText = `${att.time}〜${att.leaveTime}`;
-    } else if (hasIn) {
-      badge = '<span class="attend-badge badge-working">🟢 出勤中</span>';
-      timeText = `${att.time}〜`;
+  el.innerHTML = state.members.map(m => {
+    const att = todayAttends.find(a => a.member === m);
+    let statusClass, statusText, badge;
+    if (att && att.leaveTime) {
+      statusClass = 'status-out';
+      statusText = `${att.time || '?'}〜${att.leaveTime}`;
+      badge = '✅';
+    } else if (att && att.time) {
+      statusClass = 'status-in';
+      const elapsed = calcElapsed(att.time);
+      statusText = `${att.time}〜　${elapsed}`;
+      badge = '🟢';
     } else {
-      badge = '<span class="attend-badge badge-out">退勤のみ</span>';
-      timeText = `〜${att.leaveTime}`;
+      statusClass = 'status-none';
+      statusText = '未出勤';
+      badge = '⚪';
     }
-    return `<div class="attend-status-item">
-      <div>
-        <div class="attend-name">${m}</div>
-        <div class="attend-time">${timeText}</div>
+    const safe = m.replace(/'/g, "\\'");
+    return `<div class="attend-tile ${statusClass}" onclick="tapAttendTile('${safe}')">
+      <div class="attend-tile-avatar">${initials(m)}</div>
+      <div class="attend-tile-info">
+        <div class="attend-tile-name">${m}</div>
+        <div class="attend-tile-status">${statusText}</div>
       </div>
-      ${badge}
+      <div class="attend-tile-badge">${badge}</div>
     </div>`;
   }).join('');
+}
+
+// タイルタップで出勤/退勤をトグル
+function tapAttendTile(member) {
+  const date = getTodayJST();
+  const time = getTimeJST();
+  if (!state.attendances) state.attendances = [];
+  const idx = state.attendances.findIndex(a => a.date === date && a.member === member);
+
+  let actionType;
+  if (idx < 0) {
+    // 未出勤 → 出勤
+    state.attendances.push({ id: Date.now() + Math.random(), date, member, time, leaveTime: '' });
+    actionType = 'in';
+  } else if (state.attendances[idx].time && !state.attendances[idx].leaveTime) {
+    // 出勤中 → 退勤
+    state.attendances[idx].leaveTime = time;
+    document.getElementById('rec-end').value = time;
+    document.getElementById('rec-start').value = state.attendances[idx].time || '09:00';
+    actionType = 'out';
+  } else if (state.attendances[idx].leaveTime) {
+    // 退勤済 → 確認して取消
+    if (!confirm(`${member}さんの本日の勤怠を取り消しますか？`)) return;
+    state.attendances.splice(idx, 1);
+    actionType = 'cancel';
+  } else {
+    // 退勤のみの状態 → 出勤を記録
+    state.attendances[idx].time = time;
+    actionType = 'in';
+  }
+
+  save();
+  renderAttendTiles();
+
+  let msg;
+  if (actionType === 'in') msg = `🌅 ${member}さん 出勤`;
+  else if (actionType === 'out') msg = `🌇 ${member}さん 退勤`;
+  else msg = `${member}さんの勤怠を取り消しました`;
+
+  if (gasUrl) {
+    pushAttendToCloud().then(() => toast(msg)).catch(() => toast('⚠️ 送信に失敗しました'));
+  } else {
+    toast(msg);
+  }
 }
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
@@ -1494,7 +1464,6 @@ function getTodayJST() {
 }
 // 出勤ページ初期化（デフォルトページ）
 initAttendPage();
-renderAttendStatus();
 if (gasUrl) syncAll();
 </script>
 </body>
