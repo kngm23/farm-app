@@ -100,6 +100,24 @@ textarea{resize:vertical;min-height:70px}
 .config-info{background:var(--green-pale);border-radius:10px;padding:12px;font-size:13px;color:var(--green);line-height:1.7;margin-bottom:14px}
 .add-inline{display:flex;gap:8px}
 .add-inline input{flex:1}
+/* カテゴリボタングリッド（記録ページ） */
+.cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat-btn{display:flex;align-items:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;-webkit-user-select:none;user-select:none;transition:all .12s;min-height:48px}
+.cat-btn:active{transform:scale(.97)}
+.cat-btn.selected{border-color:var(--green);background:var(--green-pale)}
+.cat-btn-icon{font-size:20px;line-height:1;flex-shrink:0}
+.cat-btn-name{font-size:14px;color:var(--text);font-weight:500}
+.cat-btn.selected .cat-btn-name{color:var(--green)}
+.cat-more{font-size:13px;color:var(--text-sub);text-align:center;margin-top:10px;cursor:pointer;-webkit-user-select:none;user-select:none}
+.cat-more:active{color:var(--green)}
+/* カテゴリ管理リスト（設定画面） */
+.cat-manage-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--bg)}
+.cat-manage-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+.cat-manage-name{flex:1;font-size:14px;color:var(--text)}
+.cat-manage-actions{display:flex;gap:4px;flex-shrink:0}
+.cat-order-btn{background:var(--surface);border:1px solid var(--border);border-radius:6px;width:30px;height:30px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-sub)}
+.cat-order-btn:active{background:var(--green-pale)}
+.cat-del-btn{background:#FEE;border:1px solid #F5C6C6;border-radius:6px;width:30px;height:30px;font-size:13px;cursor:pointer;color:#C0392B;display:flex;align-items:center;justify-content:center}
 /* メンバー詳細モーダル */
 .mem-profile{display:flex;flex-direction:column;align-items:center;padding:20px 0 16px;border-bottom:1px solid var(--border);margin-bottom:16px}
 .mem-profile-avatar{width:72px;height:72px;border-radius:50%;background:var(--green-pale);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--green);margin-bottom:10px}
@@ -242,13 +260,10 @@ textarea{resize:vertical;min-height:70px}
       <input type="hidden" id="rec-start" value="09:00">
       <input type="hidden" id="rec-end">
       <div class="field">
-        <label>作業カテゴリ</label>
-        <select id="rec-cat">
-          <option>播種（種まき）</option><option>定植・移植</option><option>施肥・追肥</option>
-          <option>防除・消毒</option><option>除草・草刈り</option><option>収穫</option>
-          <option>選果・出荷調整</option><option>灌水</option><option>整枝・剪定</option>
-          <option>土壌管理・耕耘</option><option>その他</option>
-        </select>
+        <label>作業カテゴリ <span style="color:var(--text-hint);font-weight:400;font-size:12px">（タップで選択）</span></label>
+        <input type="hidden" id="rec-cat" value="">
+        <div id="rec-cat-grid" class="cat-grid"></div>
+        <div id="rec-cat-more" class="cat-more" onclick="toggleCatMore()" style="display:none">▼ もっと見る</div>
       </div>
       <div class="field">
         <label>作業内容（詳細）</label>
@@ -328,6 +343,16 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-secondary" onclick="testConnection()">接続テスト</button>
     </div>
     <div class="card">
+      <div class="section-label">作業カテゴリ管理</div>
+      <div class="config-info">記録ページで使う作業カテゴリを設定できます。アイコン（絵文字）と名前を登録してください。</div>
+      <div class="add-inline" style="margin-bottom:12px">
+        <input type="text" id="new-cat-icon" placeholder="🌱" maxlength="2" style="flex:0 0 56px;text-align:center;font-size:18px">
+        <input type="text" id="new-cat-name" placeholder="カテゴリ名" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="addCategory()" style="flex:0 0 auto;width:auto;padding:0 16px">追加</button>
+      </div>
+      <div id="cat-manage-list"></div>
+    </div>
+    <div class="card">
       <div class="section-label">データ管理</div>
       <button class="btn btn-secondary" onclick="syncAll()" style="margin-bottom:10px">☁️ クラウドから同期</button>
       <button class="btn btn-danger" onclick="clearLocal()">ローカルデータをリセット</button>
@@ -358,12 +383,7 @@ textarea{resize:vertical;min-height:70px}
       <div><label>終了</label><input type="time" id="e-end"></div>
     </div>
     <div class="field"><label>カテゴリ</label>
-      <select id="e-cat">
-        <option>播種（種まき）</option><option>定植・移植</option><option>施肥・追肥</option>
-        <option>防除・消毒</option><option>除草・草刈り</option><option>収穫</option>
-        <option>選果・出荷調整</option><option>灌水</option><option>整枝・剪定</option>
-        <option>土壌管理・耕耘</option><option>その他</option>
-      </select>
+      <select id="e-cat"></select>
     </div>
     <div class="field"><label>作業内容</label><textarea id="e-detail"></textarea></div>
     <div class="field">
@@ -413,7 +433,23 @@ textarea{resize:vertical;min-height:70px}
   }
 })();
 
-let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[],"attendances":[]}');
+let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[],"attendances":[],"categories":[]}');
+// カテゴリ初期化（未設定なら既定値）
+if (!state.categories || state.categories.length === 0) {
+  state.categories = [
+    { name: '播種（種まき）', icon: '🌱' },
+    { name: '定植・移植', icon: '🪴' },
+    { name: '施肥・追肥', icon: '💧' },
+    { name: '防除・消毒', icon: '🛡️' },
+    { name: '除草・草刈り', icon: '🌿' },
+    { name: '収穫', icon: '🍇' },
+    { name: '選果・出荷調整', icon: '📦' },
+    { name: '灌水', icon: '💦' },
+    { name: '整枝・剪定', icon: '✂️' },
+    { name: '土壌管理・耕耘', icon: '🚜' },
+    { name: 'その他', icon: '📝' }
+  ];
+}
 let gasUrl = localStorage.getItem('gasUrl') || '';
 let editId = null;
 let calY = new Date().getFullYear(), calM = new Date().getMonth();
@@ -622,10 +658,16 @@ function showPage(id, btn) {
   if (id === 'members') renderMembers();
   if (id === 'record') {
     document.getElementById('rec-date').value = getTodayJST();
+    document.getElementById('rec-cat').value = '';
+    catShowAll = false;
+    renderCatGrid();
     setRecStartFromAttend();
     setRecEndTimeNow();
   }
-  if (id === 'settings') document.getElementById('gas-url').value = gasUrl;
+  if (id === 'settings') {
+    document.getElementById('gas-url').value = gasUrl;
+    renderCatManage();
+  }
 }
 
 // ---- Helpers ----
@@ -790,6 +832,130 @@ function setRecStartFromAttend() {
   }
 }
 
+// ---- カテゴリ管理 ----
+let catShowAll = false;
+
+// 使用頻度を集計してカテゴリを並べ替え
+function getSortedCategories() {
+  const freq = {};
+  state.records.forEach(r => {
+    if (r.category) freq[r.category] = (freq[r.category] || 0) + 1;
+  });
+  // カテゴリ配列を使用頻度順にソート（頻度同じなら元の順序維持）
+  return [...state.categories].sort((a, b) => {
+    const fa = freq[a.name] || 0;
+    const fb = freq[b.name] || 0;
+    return fb - fa;
+  });
+}
+
+// 記録ページのカテゴリグリッド描画
+function renderCatGrid() {
+  const grid = document.getElementById('rec-cat-grid');
+  const moreBtn = document.getElementById('rec-cat-more');
+  if (!grid) return;
+
+  const sorted = getSortedCategories();
+  const selected = document.getElementById('rec-cat').value;
+  const showCount = catShowAll ? sorted.length : 6;
+  const visible = sorted.slice(0, showCount);
+
+  grid.innerHTML = visible.map((c, idx) => {
+    const sel = c.name === selected;
+    const safe = c.name.replace(/'/g, "\\'");
+    return `<div class="cat-btn ${sel?'selected':''}" onclick="selectCat('${safe}')">
+      <span class="cat-btn-icon">${c.icon || '📝'}</span>
+      <span class="cat-btn-name">${c.name}</span>
+    </div>`;
+  }).join('');
+
+  // もっと見るボタン
+  if (moreBtn) {
+    if (sorted.length > 6) {
+      moreBtn.style.display = 'block';
+      moreBtn.textContent = catShowAll ? '▲ 閉じる' : '▼ もっと見る';
+    } else {
+      moreBtn.style.display = 'none';
+    }
+  }
+}
+
+function selectCat(name) {
+  document.getElementById('rec-cat').value = name;
+  renderCatGrid();
+}
+
+function toggleCatMore() {
+  catShowAll = !catShowAll;
+  renderCatGrid();
+}
+
+// 設定画面：カテゴリ管理リスト描画
+function renderCatManage() {
+  const el = document.getElementById('cat-manage-list');
+  if (!el) return;
+  if (!state.categories.length) {
+    el.innerHTML = '<p style="color:var(--text-hint);font-size:13px;text-align:center;padding:12px 0">カテゴリが登録されていません</p>';
+    return;
+  }
+  el.innerHTML = state.categories.map((c, idx) => {
+    const safe = c.name.replace(/'/g, "\\'");
+    return `<div class="cat-manage-item">
+      <span class="cat-manage-icon">${c.icon || '📝'}</span>
+      <span class="cat-manage-name">${c.name}</span>
+      <div class="cat-manage-actions">
+        <button class="cat-order-btn" onclick="moveCat(${idx},-1)" ${idx===0?'style="opacity:.3"':''}>▲</button>
+        <button class="cat-order-btn" onclick="moveCat(${idx},1)" ${idx===state.categories.length-1?'style="opacity:.3"':''}>▼</button>
+        <button class="cat-del-btn" onclick="deleteCategory(${idx})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addCategory() {
+  const iconEl = document.getElementById('new-cat-icon');
+  const nameEl = document.getElementById('new-cat-name');
+  const icon = iconEl.value.trim() || '📝';
+  const name = nameEl.value.trim();
+  if (!name) { toast('⚠️ カテゴリ名を入力してください'); return; }
+  if (state.categories.some(c => c.name === name)) { toast('⚠️ 同じ名前のカテゴリが既にあります'); return; }
+  state.categories.push({ name, icon });
+  save();
+  iconEl.value = '';
+  nameEl.value = '';
+  renderCatManage();
+  toast('✅ カテゴリを追加しました');
+  if (gasUrl) pushCategoriesToCloud();
+}
+
+function deleteCategory(idx) {
+  const c = state.categories[idx];
+  if (!confirm(`「${c.name}」を削除しますか？`)) return;
+  state.categories.splice(idx, 1);
+  save();
+  renderCatManage();
+  toast('削除しました');
+  if (gasUrl) pushCategoriesToCloud();
+}
+
+function moveCat(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= state.categories.length) return;
+  const tmp = state.categories[idx];
+  state.categories[idx] = state.categories[newIdx];
+  state.categories[newIdx] = tmp;
+  save();
+  renderCatManage();
+  if (gasUrl) pushCategoriesToCloud();
+}
+
+async function pushCategoriesToCloud() {
+  if (!gasUrl) return;
+  try {
+    await gasGet({ action: 'syncCategories', data: JSON.stringify(state.categories) });
+  } catch(e) { console.warn('category sync failed', e); }
+}
+
 function setRecEndTimeNow() {
   // 現在時刻（JST）を終了時間にセット
   const now = new Date();
@@ -800,6 +966,9 @@ function setRecEndTimeNow() {
 }
 
 function saveRecord() {
+  // カテゴリ未選択チェック
+  const catVal = document.getElementById('rec-cat').value;
+  if (!catVal) { toast('⚠️ 作業カテゴリを選択してください'); return; }
   // 作業日はrec-dateから取得（デフォルト当日・手動変更可）
   const date = document.getElementById('rec-date').value || getTodayJST();
   // 同日の出勤者を作業者として自動セット
@@ -823,6 +992,9 @@ function saveRecord() {
   });
   toast('⏳ 保存中...');
   document.getElementById('rec-date').value = getTodayJST();
+  document.getElementById('rec-cat').value = '';
+  catShowAll = false;
+  renderCatGrid();
   document.getElementById('rec-detail').value = '';
   document.getElementById('rec-memo').value = '';
   document.getElementById('rec-prog').value = 100;
@@ -907,6 +1079,13 @@ function openEdit(id) {
   document.getElementById('e-date').value = r.date;
   document.getElementById('e-start').value = r.start;
   document.getElementById('e-end').value = r.end;
+  // カテゴリoptionを動的生成
+  const eCatSel = document.getElementById('e-cat');
+  eCatSel.innerHTML = state.categories.map(c => `<option>${c.name}</option>`).join('');
+  // 既存カテゴリが一覧にない場合は追加
+  if (r.category && !state.categories.some(c => c.name === r.category)) {
+    eCatSel.innerHTML += `<option>${r.category}</option>`;
+  }
   document.getElementById('e-cat').value = r.category;
   document.getElementById('e-detail').value = r.detail || '';
   document.getElementById('e-memo').value = r.memo || '';
@@ -1206,6 +1385,9 @@ async function syncAll() {
     if (data.members && data.members.length) {
       state.members = data.members;
     }
+    if (data.categories && data.categories.length) {
+      state.categories = data.categories;
+    }
     if (data.attendances) {
       // クラウドと手元の出勤データをマージ（どちらかにしかないデータを保持）
       const cloud = data.attendances;
@@ -1340,9 +1522,9 @@ function renderAttendTiles() {
 
   if (summaryEl) {
     summaryEl.innerHTML = `
-      <div class="attend-summary-box in"><div class="attend-summary-num">${cntWork}</div><div class="attend-summary-label">出勤中</div></div>
-      <div class="attend-summary-box out"><div class="attend-summary-num">${cntOut}</div><div class="attend-summary-label">退勤済</div></div>
-      <div class="attend-summary-box"><div class="attend-summary-num">${state.members.length - cntWork - cntOut}</div><div class="attend-summary-label">未出勤</div></div>
+      <div class="attend-summary-box in"><div class="attend-summary-num">${cntWork}</div><div class="attend-summary-label">🚀 出勤中</div></div>
+      <div class="attend-summary-box out"><div class="attend-summary-num">${cntOut}</div><div class="attend-summary-label">🏁 退勤済</div></div>
+      <div class="attend-summary-box"><div class="attend-summary-num">${state.members.length - cntWork - cntOut}</div><div class="attend-summary-label">⬜ 未出勤</div></div>
     `;
   }
 
@@ -1352,16 +1534,16 @@ function renderAttendTiles() {
     if (att && att.leaveTime) {
       statusClass = 'status-out';
       statusText = `${att.time || '?'}〜${att.leaveTime}`;
-      badge = '✅';
+      badge = '🏁';
     } else if (att && att.time) {
       statusClass = 'status-in';
       const elapsed = calcElapsed(att.time);
       statusText = `${att.time}〜　${elapsed}`;
-      badge = '🟢';
+      badge = '🚀';
     } else {
       statusClass = 'status-none';
       statusText = '未出勤';
-      badge = '⚪';
+      badge = '⬜';
     }
     const safe = m.replace(/'/g, "\\'");
     return `<div class="attend-tile ${statusClass}" onclick="tapAttendTile('${safe}')">
