@@ -434,6 +434,15 @@ textarea{resize:vertical;min-height:70px}
 })();
 
 let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[],"attendances":[],"categories":[]}');
+// カテゴリ重複除去（同じ名前は最初の1つだけ残す）
+if (state.categories && state.categories.length > 0) {
+  const seen = new Set();
+  state.categories = state.categories.filter(c => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+}
 // カテゴリ初期化（未設定なら既定値）
 if (!state.categories || state.categories.length === 0) {
   state.categories = [
@@ -1386,7 +1395,13 @@ async function syncAll() {
       state.members = data.members;
     }
     if (data.categories && data.categories.length) {
-      state.categories = data.categories;
+      // 重複除去してから反映
+      const seen = new Set();
+      state.categories = data.categories.filter(c => {
+        if (seen.has(c.name)) return false;
+        seen.add(c.name);
+        return true;
+      });
     }
     if (data.attendances) {
       // クラウドと手元の出勤データをマージ（どちらかにしかないデータを保持）
