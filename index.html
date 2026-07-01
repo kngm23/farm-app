@@ -100,6 +100,8 @@ textarea{resize:vertical;min-height:70px}
 .config-info{background:var(--green-pale);border-radius:10px;padding:12px;font-size:13px;color:var(--green);line-height:1.7;margin-bottom:14px}
 .add-inline{display:flex;gap:8px}
 .add-inline input{flex:1}
+/* 管理者専用要素（非管理者では非表示） */
+body.not-admin .admin-only{display:none !important}
 /* カテゴリボタングリッド（記録ページ） */
 .cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .cat-btn{display:flex;align-items:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;-webkit-user-select:none;user-select:none;transition:all .12s;min-height:48px}
@@ -343,6 +345,32 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-secondary" onclick="testConnection()">接続テスト</button>
     </div>
     <div class="card">
+      <div class="section-label">管理者権限</div>
+      <div class="config-info" id="admin-status-info">管理者パスワードを入力すると、記録の編集・削除ができるようになります。</div>
+      <div id="admin-login-area">
+        <div class="field">
+          <label>管理者パスワード</label>
+          <input type="password" id="admin-pw" placeholder="パスワードを入力">
+        </div>
+        <button class="btn btn-primary" onclick="loginAdmin()">管理者としてログイン</button>
+      </div>
+      <div id="admin-loggedin-area" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--green-pale);border-radius:8px;margin-bottom:10px">
+          <span style="font-size:18px">✅</span>
+          <span style="font-size:14px;color:var(--green);font-weight:600">管理者としてログイン中</span>
+        </div>
+        <button class="btn btn-secondary" onclick="logoutAdmin()">ログアウト</button>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <div class="config-info">管理者パスワードを変更できます。</div>
+          <div class="field">
+            <label>新しいパスワード</label>
+            <input type="text" id="new-admin-pw" placeholder="新しいパスワード">
+          </div>
+          <button class="btn btn-primary" onclick="changeAdminPw()">パスワードを変更</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <div class="section-label">作業カテゴリ管理</div>
       <div class="config-info">記録ページで使う作業カテゴリを設定できます。アイコン（絵文字）と名前を登録してください。</div>
       <div class="add-inline" style="margin-bottom:12px">
@@ -475,6 +503,85 @@ let calY = new Date().getFullYear(), calM = new Date().getMonth();
 
 function save() { localStorage.setItem('farmApp', JSON.stringify(state)); }
 function saveGasUrl() { gasUrl = document.getElementById('gas-url').value.trim(); localStorage.setItem('gasUrl', gasUrl); toast('URLを保存しました'); }
+
+// ---- 管理者権限 ----
+let isAdmin = localStorage.getItem('isAdmin') === 'true';
+let adminPassword = ''; // クラウドから取得
+
+async function loginAdmin() {
+  const pw = document.getElementById('admin-pw').value.trim();
+  if (!pw) { toast('⚠️ パスワードを入力してください'); return; }
+  if (!gasUrl) { toast('⚠️ 先にURLを設定してください'); return; }
+  // クラウドから正しいパスワードを取得して照合
+  try {
+    const data = await gasGet({ action: 'getAll' });
+    const correctPw = data.adminPassword || '';
+    if (!correctPw) {
+      // まだパスワード未設定 → このパスワードを初期設定
+      await gasGet({ action: 'setAdminPassword', data: JSON.stringify({ password: pw }) });
+      isAdmin = true;
+      localStorage.setItem('isAdmin', 'true');
+      localStorage.setItem('adminPw', pw);
+      toast('✅ 管理者パスワードを設定しました');
+      updateAdminUI();
+      applyAdminVisibility();
+      return;
+    }
+    if (pw === correctPw) {
+      isAdmin = true;
+      localStorage.setItem('isAdmin', 'true');
+      localStorage.setItem('adminPw', pw);
+      toast('✅ 管理者としてログインしました');
+      updateAdminUI();
+      applyAdminVisibility();
+    } else {
+      toast('⚠️ パスワードが違います');
+    }
+  } catch(e) {
+    toast('⚠️ 照合に失敗しました');
+  }
+}
+
+function logoutAdmin() {
+  isAdmin = false;
+  localStorage.setItem('isAdmin', 'false');
+  localStorage.removeItem('adminPw');
+  toast('ログアウトしました');
+  updateAdminUI();
+  applyAdminVisibility();
+}
+
+async function changeAdminPw() {
+  const newPw = document.getElementById('new-admin-pw').value.trim();
+  if (!newPw) { toast('⚠️ 新しいパスワードを入力してください'); return; }
+  if (!isAdmin) { toast('⚠️ 管理者のみ変更できます'); return; }
+  try {
+    await gasGet({ action: 'setAdminPassword', data: JSON.stringify({ password: newPw }) });
+    localStorage.setItem('adminPw', newPw);
+    document.getElementById('new-admin-pw').value = '';
+    toast('✅ パスワードを変更しました');
+  } catch(e) {
+    toast('⚠️ 変更に失敗しました');
+  }
+}
+
+function updateAdminUI() {
+  const loginArea = document.getElementById('admin-login-area');
+  const loggedinArea = document.getElementById('admin-loggedin-area');
+  if (loginArea && loggedinArea) {
+    loginArea.style.display = isAdmin ? 'none' : 'block';
+    loggedinArea.style.display = isAdmin ? 'block' : 'none';
+  }
+}
+
+// 管理者以外は編集・削除ボタンを隠す
+function applyAdminVisibility() {
+  const cur = document.querySelector('.page.active')?.id?.replace('page-','');
+  if (cur === 'log') renderLog();
+  if (cur === 'members') renderMembers();
+  document.body.classList.toggle('is-admin', isAdmin);
+  document.body.classList.toggle('not-admin', !isAdmin);
+}
 
 function toast(msg, dur=2200) {
   const t = document.getElementById('toast');
@@ -686,6 +793,7 @@ function showPage(id, btn) {
   if (id === 'settings') {
     document.getElementById('gas-url').value = gasUrl;
     renderCatManage();
+    updateAdminUI();
   }
 }
 
@@ -712,6 +820,7 @@ function addMember() {
   if (gasUrl) pushMembersToCloud();
 }
 function deleteMember(name) {
+  if (!isAdmin) { toast('⚠️ 管理者のみ削除できます'); return; }
   if (!confirm(`「${name}」を削除しますか？`)) return;
   state.members = state.members.filter(m => m !== name);
   save(); renderMembers(); renderMemberGrid('rec-member-grid', []);
@@ -740,7 +849,7 @@ function renderMembers() {
           <div class="mem-hrs">${fmtH(h)} 稼働</div>
         </div>
       </div>
-      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMember('${safe}')">削除</button>
+      <button class="btn btn-danger btn-sm admin-only" onclick="event.stopPropagation();deleteMember('${safe}')">削除</button>
     </div>`;
   }).join('');
 }
@@ -1083,8 +1192,8 @@ function renderLog() {
       <div class="log-meta">👤 ${memArr(r).join('・')}</div>
       <div class="pbar"><div class="pbar-fill" style="width:${p}%"></div></div>
       <div class="log-actions">
-        <button class="btn btn-secondary btn-sm" onclick="openEdit(${r.id})">✏️ 編集</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteById(${r.id})">🗑️ 削除</button>
+        <button class="btn btn-secondary btn-sm admin-only" onclick="openEdit(${r.id})">✏️ 編集</button>
+        <button class="btn btn-danger btn-sm admin-only" onclick="deleteById(${r.id})">🗑️ 削除</button>
       </div>
     </div>`;
   }).join('');
@@ -1092,6 +1201,7 @@ function renderLog() {
 
 // ---- Edit ----
 function openEdit(id) {
+  if (!isAdmin) { toast('⚠️ 管理者のみ編集できます'); return; }
   const r = state.records.find(r => String(r.id) === String(id));
   if (!r) return;
   editId = id;
@@ -1141,6 +1251,7 @@ function updateRecord() {
 }
 
 function deleteById(id) {
+  if (!isAdmin) { toast('⚠️ 管理者のみ削除できます'); return; }
   if (!confirm('この記録を削除しますか？')) return;
   setStatus('削除中...', 'loading');
   if (gasUrl) {
@@ -1153,6 +1264,7 @@ function deleteById(id) {
   }
 }
 function deleteRecord() {
+  if (!isAdmin) { toast('⚠️ 管理者のみ削除できます'); return; }
   if (!confirm('この記録を削除しますか？')) return;
   const id = editId;
   closeModal();
@@ -1191,7 +1303,7 @@ function showDay(d) {
     <div class="log-top"><span class="log-date">${r.start}〜${r.end}（${fmtH(calcH(r.start,r.end))}）</span><span class="badge ${badgeClass(r.progress)}">${r.progress}%</span></div>
     <div class="log-cat">${r.category}</div><div class="log-detail">${r.detail||''}</div>
     <div class="log-meta">👤 ${memArr(r).join('・')}</div>
-    <button class="btn btn-secondary btn-sm" onclick="openEdit(${r.id})" style="margin-top:8px">✏️ 編集</button>
+    <button class="btn btn-secondary btn-sm admin-only" onclick="openEdit(${r.id})" style="margin-top:8px">✏️ 編集</button>
   </div>`).join('');
 }
 
@@ -1676,6 +1788,7 @@ function getTodayJST() {
 }
 // 出勤ページ初期化（デフォルトページ）
 initAttendPage();
+applyAdminVisibility();
 if (gasUrl) syncAll();
 </script>
 </body>
