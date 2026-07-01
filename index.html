@@ -434,6 +434,16 @@ textarea{resize:vertical;min-height:70px}
 })();
 
 let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[],"attendances":[],"categories":[]}');
+// 不正な出勤データを除去（test123・テストメンバーなど）
+if (state.attendances && state.attendances.length > 0) {
+  state.attendances = state.attendances.filter(a => {
+    if (String(a.id).includes('test')) return false;
+    if (a.member === 'テスト' || a.member === 'test') return false;
+    if (!a.member || !a.date) return false;
+    return true;
+  });
+}
+
 // カテゴリ重複除去（同じ名前は最初の1つだけ残す）
 if (state.categories && state.categories.length > 0) {
   const seen = new Set();
@@ -1405,7 +1415,12 @@ async function syncAll() {
     }
     if (data.attendances) {
       // クラウドと手元の出勤データをマージ（どちらかにしかないデータを保持）
-      const cloud = data.attendances;
+      const cloud = (data.attendances || []).filter(a => {
+        if (String(a.id).includes('test')) return false;
+        if (a.member === 'テスト' || a.member === 'test') return false;
+        if (!a.member || !a.date) return false;
+        return true;
+      });
       const local = state.attendances || [];
       const merged = [...local];
       cloud.forEach(ca => {
