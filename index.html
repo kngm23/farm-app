@@ -1139,16 +1139,16 @@ function saveRecord() {
   }
 }
 
-function autoRegisterAttendFromRecord(date, members) {
+async function autoRegisterAttendFromRecord(date, members) {
   if (!date || !members || !members.length) return;
   if (!state.attendances) state.attendances = [];
 
-  let added = false;
+  // 出勤記録がない場合は開始時刻を rec-start から取得
+  const startTime = document.getElementById('rec-start')?.value || '09:00';
+  const toRegister = [];
   members.forEach(m => {
     const exists = state.attendances.find(a => a.date === date && a.member === m);
     if (!exists) {
-      // 出勤記録がない場合は開始時刻を rec-start から取得
-      const startTime = document.getElementById('rec-start')?.value || '09:00';
       state.attendances.push({
         id: Date.now() + Math.random(),
         date,
@@ -1156,13 +1156,20 @@ function autoRegisterAttendFromRecord(date, members) {
         time: startTime,
         leaveTime: ''
       });
-      added = true;
+      toRegister.push(m);
     }
   });
 
-  if (added) {
-    save();
-    if (gasUrl) pushAttendToCloud();
+  if (!toRegister.length) return;
+  save();
+
+  if (gasUrl) {
+    // メンバーごとに1件ずつ addAttend を送信（全件送信は廃止）
+    for (const m of toRegister) {
+      try {
+        await gasGet({ action: 'addAttend', data: JSON.stringify({ date, member: m, time: startTime }) });
+      } catch(e) { console.warn('addAttend failed', e); }
+    }
   }
 }
 
@@ -1476,37 +1483,13 @@ async function gasGet(params) {
 }
 
 // 時刻・日付の正規化（1899年対策）
-function normalizeRecord(r) {
-  function fixTime(val) {
-    if (!val) return '';
-    var s = String(val);
-    if (s.includes('1899') || (s.includes('T') && s.includes(':'))) {
-      var d = new Date(val);
-      if (!isNaN(d.getTime())) {
-        return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0');
-      }
-    }
-    return s;
-  }
-  function fixDate(val) {
-    if (!val) return '';
-    var s = String(val);
-    if (s.includes('T')) return s.split('T')[0];
-    return s;
-  }
-  return Object.assign({}, r, {
-    date: fixDate(r.date),
-    start: fixTime(r.start),
-    end: fixTime(r.end),
-    members: Array.isArray(r.members) ? r.members : []
-  });
-}
-
-// ☁️同期：クラウドのデータでローカルを完全上書き（クラウド優先）
-async function syncAll() {
+// ☁️同期：スプレッドシートが正。クラウドのデータでローカルを完全上書き（マージしない）
+// silent=true の場合はトースト/ステータス表示を出さない（tapAttendTileなど連続操作時の二重表示防止用）
+async function syncAll(silent) {
   if (!gasUrl) { toast('⚠️ 設定画面でURLを入力してください'); return; }
   const fab = document.getElementById('sync-fab');
-  fab.classList.add('syncing'); setStatus('同期中...', 'loading');
+  fab.classList.add('syncing');
+  if (!silent) setStatus('同期中...', 'loading');
   try {
     const data = await gasGet({ action: 'getAll' });
     if (data.records) {
@@ -1526,39 +1509,22 @@ async function syncAll() {
       });
     }
     if (data.attendances) {
-      // クラウドと手元の出勤データをマージ（どちらかにしかないデータを保持）
-      const cloud = (data.attendances || []).filter(a => {
+      // クラウド＝正。ローカルとはマージせず完全上書き（削除された行はローカルからも消える）
+      state.attendances = (data.attendances || []).filter(a => {
         if (String(a.id).includes('test')) return false;
         if (a.member === 'テスト' || a.member === 'test') return false;
         if (!a.member || !a.date) return false;
         return true;
       });
-      const local = state.attendances || [];
-      const merged = [...local];
-      cloud.forEach(ca => {
-        const exists = merged.findIndex(a =>
-          String(a.id) === String(ca.id) ||
-          (a.date === ca.date && a.member === ca.member)
-        );
-        if (exists >= 0) {
-          // クラウドにleaveTimeがあってローカルにない場合は保持
-          if (ca.leaveTime && !merged[exists].leaveTime) merged[exists].leaveTime = ca.leaveTime;
-          if (ca.time && !merged[exists].time) merged[exists].time = ca.time;
-        } else {
-          merged.push(ca);
-        }
-      });
-      state.attendances = merged;
     }
     save();
-    toast('☁️ 同期完了');
-    setStatus('同期済み ✓', 'ok');
+    if (!silent) { toast('☁️ 同期完了'); setStatus('同期済み ✓', 'ok'); }
     refreshCurrentPage();
   } catch(e) {
     toast('⚠️ 同期に失敗しました'); setStatus('接続エラー', 'err');
   }
   fab.classList.remove('syncing');
-  setTimeout(() => setStatus('', ''), 4000);
+  if (!silent) setTimeout(() => setStatus('', ''), 4000);
 }
 
 // 記録追加：クラウドに書き込み → 同期
@@ -1700,47 +1666,73 @@ function renderAttendTiles() {
 }
 
 // タイルタップで出勤/退勤をトグル
-function tapAttendTile(member) {
+// スプレッドシートが正：クラウドへは操作1件ごとの命令のみ送信し、都度☁️同期で再取得する
+async function tapAttendTile(member) {
   const date = getTodayJST();
   const time = getTimeJST();
-  if (!state.attendances) state.attendances = [];
-  const idx = state.attendances.findIndex(a => a.date === date && a.member === member);
 
-  let actionType;
-  if (idx < 0) {
-    // 未出勤 → 出勤
-    state.attendances.push({ id: Date.now() + Math.random(), date, member, time, leaveTime: '' });
-    actionType = 'in';
-  } else if (state.attendances[idx].time && !state.attendances[idx].leaveTime) {
-    // 出勤中 → 退勤
-    state.attendances[idx].leaveTime = time;
-    document.getElementById('rec-end').value = time;
-    document.getElementById('rec-start').value = state.attendances[idx].time || '09:00';
-    actionType = 'out';
-  } else if (state.attendances[idx].leaveTime) {
-    // 退勤済 → 確認して取消
+  if (!gasUrl) {
+    // gasUrl未設定時のみ従来のローカルのみ動作を踏襲
+    if (!state.attendances) state.attendances = [];
+    const idx = state.attendances.findIndex(a => a.date === date && a.member === member);
+    let actionType;
+    if (idx < 0) {
+      state.attendances.push({ id: Date.now() + Math.random(), date, member, time, leaveTime: '' });
+      actionType = 'in';
+    } else if (state.attendances[idx].time && !state.attendances[idx].leaveTime) {
+      state.attendances[idx].leaveTime = time;
+      document.getElementById('rec-end').value = time;
+      document.getElementById('rec-start').value = state.attendances[idx].time || '09:00';
+      actionType = 'out';
+    } else if (state.attendances[idx].leaveTime) {
+      if (!confirm(`${member}さんの本日の勤怠を取り消しますか？`)) return;
+      state.attendances.splice(idx, 1);
+      actionType = 'cancel';
+    } else {
+      state.attendances[idx].time = time;
+      actionType = 'in';
+    }
+    save();
+    renderAttendTiles();
+    let localMsg;
+    if (actionType === 'in') localMsg = `🌅 ${member}さん 出勤`;
+    else if (actionType === 'out') localMsg = `🌇 ${member}さん 退勤`;
+    else localMsg = `${member}さんの勤怠を取り消しました`;
+    toast(localMsg);
+    return;
+  }
+
+  const att = (state.attendances||[]).find(a => a.date === date && a.member === member);
+
+  if (!att || (!att.time && att.leaveTime)) {
+    // 未出勤 → 出勤：1件追加
+    toast('⏳ 出勤を記録中...');
+    try {
+      await gasGet({ action:'addAttend', data: JSON.stringify({date, member, time}) });
+      await syncAll(true);
+      toast(`🌅 ${member}さん 出勤`);
+    } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
+  } else if (att.time && !att.leaveTime) {
+    // 出勤中 → 退勤：該当行の退勤時刻のみ更新
+    toast('⏳ 退勤を記録中...');
+    try {
+      await gasGet({ action:'updateAttend', data: JSON.stringify({date, member, leaveTime: time}) });
+      document.getElementById('rec-end').value = time;
+      document.getElementById('rec-start').value = att.time;
+      await syncAll(true);
+      toast(`🌇 ${member}さん 退勤`);
+    } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
+  } else {
+    // 退勤済 → 取消（管理者のみ・クラウドの該当1件を直接削除）
+    if (!isAdmin) { toast('⚠️ 取り消しは管理者のみ可能です'); return; }
     if (!confirm(`${member}さんの本日の勤怠を取り消しますか？`)) return;
-    state.attendances.splice(idx, 1);
-    actionType = 'cancel';
-  } else {
-    // 退勤のみの状態 → 出勤を記録
-    state.attendances[idx].time = time;
-    actionType = 'in';
+    try {
+      await gasGet({ action:'deleteAttend', data: JSON.stringify({date, member}) });
+      await syncAll(true);
+      toast('取り消しました');
+    } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
   }
-
-  save();
   renderAttendTiles();
-
-  let msg;
-  if (actionType === 'in') msg = `🌅 ${member}さん 出勤`;
-  else if (actionType === 'out') msg = `🌇 ${member}さん 退勤`;
-  else msg = `${member}さんの勤怠を取り消しました`;
-
-  if (gasUrl) {
-    pushAttendToCloud().then(() => toast(msg)).catch(() => toast('⚠️ 送信に失敗しました'));
-  } else {
-    toast(msg);
-  }
 }
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
@@ -1765,13 +1757,6 @@ function applyAttendTime() {
     // 出勤記録のないメンバーのみ選択の場合は09:00のまま
     document.getElementById('rec-start').value = '09:00';
   }
-}
-
-async function pushAttendToCloud() {
-  if (!gasUrl) return;
-  try {
-    await gasGet({ action: 'syncAttend', data: JSON.stringify(state.attendances || []) });
-  } catch(e) { console.warn('attend sync failed', e); }
 }
 
 function clearLocal() {
