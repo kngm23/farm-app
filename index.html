@@ -205,6 +205,34 @@ body.not-admin .admin-only{display:none !important}
 .btn-attend-out.selected{box-shadow:0 0 0 4px rgba(231,111,81,.3);border-color:#b84f35}
 .attend-btn-icon{font-size:36px;line-height:1}
 .attend-btn-label{font-size:15px;font-weight:700}
+/* 今日ビュー：個人カード */
+.today-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
+.today-card-top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.today-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;flex-shrink:0;background:var(--green-pale);color:var(--green)}
+.today-card.state-in .today-avatar{background:#1D9E75;color:#fff}
+.today-info{flex:1;min-width:0}
+.today-name{font-size:17px;font-weight:700;color:var(--text)}
+.today-status{font-size:13px;color:var(--text-sub);margin-top:2px}
+.today-card.state-in .today-status{color:#0F6E56;font-weight:600}
+.today-card.state-out .today-status{color:var(--green);font-weight:600}
+.today-btn{width:100%;min-height:56px;border-radius:14px;border:none;font-size:17px;font-weight:700;cursor:pointer;color:#fff;transition:all .15s;font-family:inherit}
+.today-btn:active{transform:scale(.97)}
+.today-btn-in{background:#1D9E75}
+.today-btn-in:active{background:#157a5a}
+.today-btn-out{background:#E76F51}
+.today-btn-out:active{background:#c45a3e}
+.today-hint{font-size:12px;color:var(--text-hint);text-align:center;margin-top:10px}
+.attend-date-heading{font-size:12px;color:var(--text-hint);margin:2px 0 10px}
+/* 履歴カード刷新 */
+.log-row1{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
+.log-cat-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;background:var(--green-pale);color:var(--green);font-size:12px;font-weight:700;flex-shrink:0;white-space:nowrap}
+.log-date-jp{font-size:12px;color:var(--text-sub);flex-shrink:0}
+.log-time-range{font-size:12px;color:var(--text-sub);margin-left:auto;flex-shrink:0;white-space:nowrap}
+.log-work{font-size:15px;color:var(--text);font-weight:500;line-height:1.55;margin-bottom:6px;white-space:pre-wrap}
+.log-memo-box{font-size:12px;color:var(--text-sub);background:var(--bg);border-radius:8px;padding:8px 10px;white-space:pre-wrap}
+/* 非管理者：集計・メンバータブを非表示 */
+body.not-admin .nav-btn[data-page="stats"],
+body.not-admin .nav-btn[data-page="members"] { display:none }
 /* 集計アコーディオン */
 .acc-row{margin-bottom:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .acc-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--surface);-webkit-user-select:none;user-select:none;transition:background .15s}
@@ -244,6 +272,12 @@ body.not-admin .admin-only{display:none !important}
 
   <!-- 出勤 -->
   <div id="page-attend" class="page active">
+    <div id="attend-name-picker" class="card" style="display:none"></div>
+    <div id="attend-personal-card" style="display:none"></div>
+    <div id="attend-everyone-block" style="display:none">
+      <div class="section-label">みんなの状況（代理でタップできます）</div>
+      <div class="attend-date-heading" id="attend-date-heading"></div>
+    </div>
     <div class="attend-summary" id="attend-summary"></div>
     <div class="attend-tile-hint">タップで出勤、もう一度タップで退勤</div>
     <div id="attend-tiles" class="attend-tiles"></div>
@@ -334,7 +368,7 @@ body.not-admin .admin-only{display:none !important}
 
   <!-- 設定 -->
   <div id="page-settings" class="page">
-    <div class="card">
+    <div class="card admin-only">
       <div class="section-label">クラウド連携設定</div>
       <div class="config-info"><strong>Google Apps Script URL</strong>を入力すると全員がリアルタイムでデータを共有できます。</div>
       <div class="field">
@@ -371,6 +405,11 @@ body.not-admin .admin-only{display:none !important}
       </div>
     </div>
     <div class="card">
+      <div class="section-label">自分の設定</div>
+      <div class="config-info" id="my-name-info">現在の設定: 未設定</div>
+      <button class="btn btn-secondary" onclick="resetMyName()">設定し直す</button>
+    </div>
+    <div class="card admin-only">
       <div class="section-label">作業カテゴリ管理</div>
       <div class="config-info">記録ページで使う作業カテゴリを設定できます。アイコン（絵文字）と名前を登録してください。</div>
       <div class="add-inline" style="margin-bottom:12px">
@@ -380,7 +419,7 @@ body.not-admin .admin-only{display:none !important}
       </div>
       <div id="cat-manage-list"></div>
     </div>
-    <div class="card">
+    <div class="card admin-only">
       <div class="section-label">データ管理</div>
       <button class="btn btn-secondary" onclick="syncAll()" style="margin-bottom:10px">☁️ クラウドから同期</button>
       <button class="btn btn-danger" onclick="clearLocal()">ローカルデータをリセット</button>
@@ -497,7 +536,10 @@ if (!state.categories || state.categories.length === 0) {
     { name: 'その他', icon: '📝' }
   ];
 }
-let gasUrl = localStorage.getItem('gasUrl') || '';
+// ★ゼロ設定化：納品後にユーザーが実際のGAS URLへ差し替える
+const DEFAULT_GAS_URL = '★ここにGASのURLを貼る★';
+let gasUrl = localStorage.getItem('gasUrl') || DEFAULT_GAS_URL;
+let myName = localStorage.getItem('myName') || '';
 let editId = null;
 let calY = new Date().getFullYear(), calM = new Date().getMonth();
 
@@ -794,6 +836,7 @@ function showPage(id, btn) {
     document.getElementById('gas-url').value = gasUrl;
     renderCatManage();
     updateAdminUI();
+    updateMySettingsInfo();
   }
 }
 
@@ -809,6 +852,21 @@ function fmtH(h) { const n = parseFloat(h); return isNaN(n) ? '0h' : (Math.round
 function initials(n) { const p = n.split(/[\s　]/); return p.length >= 2 ? p[0].slice(-1) + p[1][0] : n.slice(0, 2); }
 function badgeClass(p) { return p >= 100 ? 'badge-done' : p >= 50 ? 'badge-mid' : 'badge-low'; }
 function memArr(r) { return Array.isArray(r.members) ? r.members : []; }
+// "2026-06-24" → "6月24日（火）"
+function fmtDateJP(dateStr) {
+  if (!dateStr) return '';
+  const parts = String(dateStr).split('-').map(Number);
+  const y = parts[0], m = parts[1], d = parts[2];
+  if (!y || !m || !d) return dateStr;
+  const dow = ['日','月','火','水','木','金','土'];
+  const dt = new Date(y, m - 1, d);
+  return `${m}月${d}日（${dow[dt.getDay()]}）`;
+}
+// カテゴリ名に対応するアイコンを取得（未登録カテゴリは📝）
+function getCatIcon(name) {
+  const cat = (state.categories || []).find(c => c.name === name);
+  return cat ? cat.icon : '📝';
+}
 
 // ---- Members ----
 function addMember() {
@@ -1188,16 +1246,14 @@ function renderLog() {
   const el = document.getElementById('log-list');
   if (!recs.length) { el.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:32px 0">記録がありません</p>'; return; }
   el.innerHTML = recs.map(r => {
-    const h = calcH(r.start, r.end), p = Number(r.progress) || 0;
     return `<div class="log-item">
-      <div class="log-top">
-        <span class="log-date">${r.date}　${r.start}〜${r.end}（${fmtH(h)}）</span>
-        <span class="badge ${badgeClass(p)}">${p}%</span>
+      <div class="log-row1">
+        <span class="log-cat-chip">${getCatIcon(r.category)} ${r.category}</span>
+        <span class="log-date-jp">${fmtDateJP(r.date)}</span>
+        <span class="log-time-range">${r.start}〜${r.end}</span>
       </div>
-      <div class="log-cat">${r.category}</div>
-      <div class="log-detail">${r.detail||''}${r.memo?'\n📝 '+r.memo:''}</div>
-      <div class="log-meta">👤 ${memArr(r).join('・')}</div>
-      <div class="pbar"><div class="pbar-fill" style="width:${p}%"></div></div>
+      <div class="log-work">${r.detail||''}</div>
+      ${r.memo ? `<div class="log-memo-box">📝 ${r.memo}</div>` : ''}
       <div class="log-actions">
         <button class="btn btn-secondary btn-sm admin-only" onclick="openEdit(${r.id})">✏️ 編集</button>
         <button class="btn btn-danger btn-sm admin-only" onclick="deleteById(${r.id})">🗑️ 削除</button>
@@ -1604,8 +1660,118 @@ function calcElapsed(startTime) {
   return h + '時間' + m + '分経過';
 }
 
+// ---- あなたは誰？（初回選択・個人カード） ----
+// 勤怠ページ上部の表示を状態に応じて切り替える：
+// myName未設定＋メンバーあり→選択UI／myName個人設定→個人カード＋みんなの状況見出し／共用端末→現行どおり
+function renderAttendTop() {
+  const pickerEl = document.getElementById('attend-name-picker');
+  const cardEl = document.getElementById('attend-personal-card');
+  const everyoneEl = document.getElementById('attend-everyone-block');
+  const dateEl = document.getElementById('attend-date-heading');
+  if (!pickerEl || !cardEl || !everyoneEl) return;
+
+  const membersReady = state.members && state.members.length > 0;
+
+  if (!myName && membersReady) {
+    pickerEl.style.display = 'block';
+    cardEl.style.display = 'none';
+    everyoneEl.style.display = 'none';
+    pickerEl.innerHTML = buildNamePickerHTML();
+    return;
+  }
+
+  pickerEl.style.display = 'none';
+
+  if (myName && myName !== '__shared__') {
+    cardEl.style.display = 'block';
+    everyoneEl.style.display = 'block';
+    if (dateEl) dateEl.textContent = fmtDateJP(getTodayJST());
+    cardEl.innerHTML = buildPersonalCardHTML();
+  } else {
+    // 共用端末、またはメンバー未取得（初回同期前）：現行どおり何も表示しない
+    cardEl.style.display = 'none';
+    everyoneEl.style.display = 'none';
+  }
+}
+
+function buildNamePickerHTML() {
+  const tiles = state.members.map(m => {
+    const safe = m.replace(/'/g, "\\'");
+    return `<div class="attend-tile status-none" onclick="selectMyName('${safe}')">
+      <div class="attend-tile-avatar">${initials(m)}</div>
+      <div class="attend-tile-info"><div class="attend-tile-name">${m}</div></div>
+    </div>`;
+  }).join('');
+  return `
+    <div class="section-label">はじめまして！あなたを選んでください</div>
+    <div class="attend-tiles" style="margin:10px 0">${tiles}</div>
+    <button class="btn btn-secondary" onclick="selectMyName('__shared__')">👥 共用端末として使う</button>
+  `;
+}
+
+function selectMyName(name) {
+  myName = name;
+  localStorage.setItem('myName', name);
+  toast(name === '__shared__' ? '共用端末として設定しました' : `${name}さんとして設定しました`);
+  updateMySettingsInfo();
+  renderAttendTiles();
+}
+
+function resetMyName() {
+  myName = '';
+  localStorage.removeItem('myName');
+  showPage('attend', document.querySelector('[data-page=attend]'));
+}
+
+function updateMySettingsInfo() {
+  const el = document.getElementById('my-name-info');
+  if (!el) return;
+  if (!myName) el.textContent = '現在の設定: 未設定';
+  else if (myName === '__shared__') el.textContent = '現在の設定: 👥 共用端末';
+  else el.textContent = `現在の設定: ${myName}さん`;
+}
+
+// 個人カードのHTMLを組み立てる（状態駆動：未出勤／出勤中／退勤済）
+// ボタンは既存の tapAttendTile(myName) を呼ぶだけ（勤怠ロジックはここで複製しない）
+function buildPersonalCardHTML() {
+  const date = getTodayJST();
+  const att = (state.attendances || []).find(a => a.date === date && a.member === myName);
+  const safe = myName.replace(/'/g, "\\'");
+
+  let stateClass, statusText, buttonHtml = '', hintHtml = '';
+  if (!att || (!att.time && att.leaveTime)) {
+    stateClass = 'state-none';
+    statusText = 'まだ出勤していません';
+    buttonHtml = `<button class="today-btn today-btn-in" onclick="tapAttendTile('${safe}')">🌅 出勤する</button>`;
+    hintHtml = `<div class="today-hint">出勤すると、このボタンが「退勤する」に変わります</div>`;
+  } else if (att.time && !att.leaveTime) {
+    stateClass = 'state-in';
+    statusText = `${att.time}〜　${calcElapsed(att.time)}`;
+    buttonHtml = `<button class="today-btn today-btn-out" onclick="tapAttendTile('${safe}')">🌇 退勤する</button>`;
+  } else {
+    stateClass = 'state-out';
+    statusText = `🏁 本日おつかれさまでした　${att.time || ''}〜${att.leaveTime}`;
+  }
+
+  return `
+    <div class="today-card ${stateClass}">
+      <div class="today-card-top">
+        <div class="today-avatar">${initials(myName)}</div>
+        <div class="today-info">
+          <div class="today-name">${myName}</div>
+          <div class="today-status">${statusText}</div>
+        </div>
+      </div>
+      ${buttonHtml}
+      ${hintHtml}
+    </div>
+  `;
+}
+
 // タイル描画
 function renderAttendTiles() {
+  renderAttendTop();
+
   const el = document.getElementById('attend-tiles');
   const summaryEl = document.getElementById('attend-summary');
   if (!el) return;
@@ -1619,7 +1785,7 @@ function renderAttendTiles() {
   const today = getTodayJST();
   const todayAttends = (state.attendances || []).filter(a => a.date === today);
 
-  // サマリー集計
+  // サマリー集計（全メンバー対象・現行どおり）
   let cntIn = 0, cntWork = 0, cntOut = 0;
   state.members.forEach(m => {
     const att = todayAttends.find(a => a.member === m);
@@ -1636,7 +1802,12 @@ function renderAttendTiles() {
     `;
   }
 
-  el.innerHTML = state.members.map(m => {
+  // 個人カードを表示中（myNameが個人設定）の場合は、タイル一覧から自分を除外
+  const visibleMembers = (myName && myName !== '__shared__')
+    ? state.members.filter(m => m !== myName)
+    : state.members;
+
+  el.innerHTML = visibleMembers.map(m => {
     const att = todayAttends.find(a => a.member === m);
     let statusClass, statusText, badge;
     if (att && att.leaveTime) {
