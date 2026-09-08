@@ -195,6 +195,15 @@ body.not-admin .admin-only{display:none !important}
 .attend-tile-status{font-size:13px;color:var(--text-sub)}
 .attend-tile.status-in .attend-tile-status{color:#0F6E56;font-weight:600}
 .attend-tile-badge{font-size:22px;flex-shrink:0}
+.attend-tile-sessions{font-size:13px;color:var(--text-sub);margin-bottom:2px}
+.attend-tile.status-in .attend-tile-sessions{color:#0F6E56;font-weight:600}
+.attend-tile-summary{font-size:11.5px;color:var(--text-hint);padding-top:5px;margin-top:3px;border-top:1px dashed var(--border)}
+.attend-tile.status-in .attend-tile-summary{color:#0F6E56}
+.session-menu-item{padding:12px 0;border-bottom:1px solid var(--border)}
+.session-menu-item:last-child{border-bottom:none}
+.session-menu-time{font-size:13px;color:var(--text);margin-bottom:8px}
+.session-menu-actions{display:flex;gap:8px}
+.session-menu-actions .btn{flex:1}
 .attend-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .btn-attend-in,.btn-attend-out{aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;padding:0;border:3px solid transparent}
 .btn-attend-in{background:#1D9E75;color:#fff;border-color:#1D9E75}
@@ -543,6 +552,17 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
     <div class="break-worked" id="break-worked"></div>
     <button class="btn btn-leave" id="break-confirm-btn" style="margin-bottom:8px" onclick="confirmBreakDialog()">🌇 退勤する</button>
     <button class="btn btn-secondary" onclick="closeBreakModal()">キャンセル</button>
+  </div>
+</div>
+
+<!-- 管理者用：長押しで開くセッション一覧（修正・取消） -->
+<div class="modal-bg" id="session-menu-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="session-menu-title">本日の記録</span>
+      <button class="modal-close" onclick="closeSessionMenu()">✕</button>
+    </div>
+    <div id="session-menu-list"></div>
   </div>
 </div>
 
@@ -952,6 +972,13 @@ function calcWorkedMinutes(start, end, breakMin) {
   if ([sh, sm, eh, em].some(isNaN)) return 0;
   return (eh * 60 + em) - (sh * 60 + sm) - (Number(breakMin) || 0);
 }
+// 1セッション分の実働分。クローズ済みは（退勤-出勤-休憩）で確定値。
+// 未クローズは休憩がまだ確定していないため、現在時刻までの経過分をそのまま返す
+function sessionWorkedMinutes(s, nowTime) {
+  if (s.leaveTime) return calcWorkedMinutes(s.time, s.leaveTime, s.breakMin || 0);
+  if (s.time && nowTime) return calcWorkedMinutes(s.time, nowTime, 0);
+  return 0;
+}
 // 分数を「H時間M分」表記にする（丸めない。表示用の整形のみ）
 function fmtMinutesJP(mins) {
   const m2 = Math.max(0, mins);
@@ -974,6 +1001,10 @@ function resolveWage(member, dateStr, wages) {
   if (!candidates.length) return 0;
   candidates.sort((a, b) => a.from.localeCompare(b.from));
   return Number(candidates[candidates.length - 1].wage) || 0;
+}
+// 分を15分単位で切り上げる（月合計にのみ適用。日ごとの計算には使わない）
+function ceilTo15(mins) {
+  return Math.ceil(Math.max(0, mins) / 15) * 15;
 }
 // "yyyy-MM" の月末日を "yyyy-MM-DD" で返す
 function monthEndStr(yyyyMM) {
@@ -1504,6 +1535,8 @@ function toggleAcc(id) {
 // ---- 給与集計（管理者のみ） ----
 // 指定月(yyyy-MM)の全メンバー分の給与を集計する。
 // 警告のある日も支給額の計算から除外せず0円として計上し、必ず警告を出す（黙って除外しない）。
+// 給与集計：セッション単位で実働分を積み上げ、日ごとには丸めない。
+// 月合計のみ「同じ時給が適用される区間ごと」に15分単位で切り上げてから合算する（5-1）。
 function computePayroll(yyyyMM) {
   const wages = state.wages || [];
   const monthAttends = (state.attendances || []).filter(a => a.date && a.date.indexOf(yyyyMM) === 0);
@@ -1514,61 +1547,98 @@ function computePayroll(yyyyMM) {
   });
 
   const result = [];
-  let grandTotal = 0, grandWorkedMin = 0;
+  let grandRawMin = 0, grandRoundedMin = 0, grandAmount = 0;
 
   state.members.forEach(member => {
-    const rows = (byMember[member] || []).slice().sort((x, y) => (x.date||'').localeCompare(y.date||''));
-    if (!rows.length) return; // その月に記録が無いメンバーは表示しない
+    const sessions = byMember[member] || [];
+    if (!sessions.length) return; // その月に記録が無いメンバーは表示しない
 
-    let workDays = 0, workedMinSum = 0, amountSum = 0;
+    // 日ごとにグループ化（勤務日数・日別内訳は日単位でまとめる）
+    const byDate = {};
+    sessions.forEach(a => {
+      if (!byDate[a.date]) byDate[a.date] = [];
+      byDate[a.date].push(a);
+    });
+    const dates = Object.keys(byDate).sort();
+
+    let workDays = 0;
     const warnings = [];
     let hasUnresolvedWage = false;
     const dayDetails = [];
+    const dayWorkedByWage = {}; // 時給ごとの実働分合計（丸めは月合計時のみ・区間ごとに行う）
 
-    rows.forEach(a => {
-      const md = fmtMD(a.date);
+    dates.forEach(date => {
+      const daySessions = byDate[date].slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      const md = fmtMD(date);
+      let dayWorked = 0;
+      let dayHasValidSession = false;
+      const sessionTexts = [];
 
-      if (a.time && !a.leaveTime) {
-        warnings.push(`${md} 退勤の記録がありません`);
-        dayDetails.push({ date: a.date, inTime: a.time, outTime: '', breakMin: Number(a.breakMin) || 0, workedMin: 0, wage: 0, amount: 0, warning: '退勤の記録がありません' });
-        return;
-      }
-      if (!a.time && a.leaveTime) {
-        warnings.push(`${md} 出勤の記録がありません`);
-        dayDetails.push({ date: a.date, inTime: '', outTime: a.leaveTime, breakMin: Number(a.breakMin) || 0, workedMin: 0, wage: 0, amount: 0, warning: '出勤の記録がありません' });
-        return;
-      }
-      if (!a.time && !a.leaveTime) return; // 出退勤どちらも無い行（通常発生しないが安全のため集計対象外）
+      daySessions.forEach(s => {
+        if (s.time && !s.leaveTime) {
+          warnings.push(`${md} 退勤の記録がありません`);
+          sessionTexts.push(`${s.time}〜？`);
+          return;
+        }
+        if (!s.time && s.leaveTime) {
+          warnings.push(`${md} 出勤の記録がありません`);
+          sessionTexts.push(`？〜${s.leaveTime}`);
+          return;
+        }
+        if (!s.time && !s.leaveTime) return; // 出退勤どちらも無い行（通常発生しないが安全のため集計対象外）
 
-      const bm = Number(a.breakMin) || 0;
-      const rawWorked = calcWorkedMinutes(a.time, a.leaveTime, bm);
-      workDays++; // 出勤・退勤が揃っている日として計上
+        const bm = Number(s.breakMin) || 0;
+        const rawWorked = calcWorkedMinutes(s.time, s.leaveTime, bm);
+        sessionTexts.push(`${s.time}〜${s.leaveTime}`);
 
-      if (rawWorked < 0) {
-        warnings.push(`${md} 勤務時間が不正です（休憩が長すぎます）`);
-        dayDetails.push({ date: a.date, inTime: a.time, outTime: a.leaveTime, breakMin: bm, workedMin: 0, wage: 0, amount: 0, warning: '勤務時間が不正です（休憩が長すぎます）' });
-        return;
-      }
+        if (rawWorked < 0) {
+          warnings.push(`${md} 勤務時間が不正です（休憩が長すぎます）`);
+          return;
+        }
 
-      const wage = resolveWage(member, a.date, wages);
-      if (wage <= 0) hasUnresolvedWage = true;
-      const amount = wage > 0 ? (rawWorked / 60 * wage) : 0;
+        dayWorked += rawWorked; // 日ごとの丸めは入れない
+        dayHasValidSession = true;
+      });
 
-      workedMinSum += rawWorked;
-      amountSum += amount;
-      dayDetails.push({ date: a.date, inTime: a.time, outTime: a.leaveTime, breakMin: bm, workedMin: rawWorked, wage, amount, warning: '' });
+      if (dayHasValidSession) workDays++; // 勤務日数は日単位（1日に複数回打っても1日）
+
+      const wage = resolveWage(member, date, wages);
+      if (dayWorked > 0 && wage <= 0) hasUnresolvedWage = true;
+      const wageKey = String(wage);
+      dayWorkedByWage[wageKey] = (dayWorkedByWage[wageKey] || 0) + dayWorked;
+
+      dayDetails.push({
+        date,
+        sessionsText: sessionTexts.join(' ／ ') || '—',
+        workedMin: dayWorked,
+        wage,
+        amount: wage > 0 ? (dayWorked / 60 * wage) : 0
+      });
     });
 
     if (hasUnresolvedWage) warnings.push('時給が未設定です');
 
-    grandTotal += amountSum;
-    grandWorkedMin += workedMinSum;
+    // 月合計：時給が同じ区間ごとに実働分を15分単位で切り上げてから金額化し、合算する
+    let rawMinSum = 0, roundedMinSum = 0, amountSum = 0;
+    Object.keys(dayWorkedByWage).forEach(wageKey => {
+      const wage = Number(wageKey);
+      const rawMin = dayWorkedByWage[wageKey];
+      rawMinSum += rawMin;
+      if (wage <= 0 || rawMin <= 0) return; // 時給未設定分は支給額0（警告済み）
+      const rounded = ceilTo15(rawMin);
+      roundedMinSum += rounded;
+      amountSum += rounded / 60 * wage;
+    });
 
-    result.push({ member, amount: amountSum, workDays, workedMin: workedMinSum, warnings, days: dayDetails });
+    grandRawMin += rawMinSum;
+    grandRoundedMin += roundedMinSum;
+    grandAmount += amountSum;
+
+    result.push({ member, amount: amountSum, workDays, workedMin: rawMinSum, roundedMin: roundedMinSum, warnings, days: dayDetails });
   });
 
   result.sort((a, b) => b.amount - a.amount); // 支給額の降順
-  return { members: result, totalAmount: grandTotal, totalWorkedMin: grandWorkedMin };
+  return { members: result, totalAmount: grandAmount, totalWorkedMin: grandRawMin, totalRoundedMin: grandRoundedMin };
 }
 
 function payrollMove(delta) {
@@ -1611,13 +1681,16 @@ function renderPayroll() {
   listEl.innerHTML = data.members.map((mem, idx) => {
     const wageAtEnd = resolveWage(mem.member, monthEndStr(payrollMonth), state.wages || []);
     const wageText = wageAtEnd > 0 ? `¥${wageAtEnd.toLocaleString()}/h` : '—';
+    const hoursText = mem.workedMin === mem.roundedMin
+      ? fmtMinutesJP(mem.workedMin)
+      : `${fmtMinutesJP(mem.workedMin)} → ${fmtMinutesJP(mem.roundedMin)}`;
     const warningsHtml = mem.warnings.length
       ? `<div class="payroll-warnings">${mem.warnings.map(w => `<div class="payroll-warn">⚠️ ${w}</div>`).join('')}</div>`
       : '';
     const detailRows = mem.days.map(d => `
       <div class="payroll-day-row">
-        <div class="payroll-day-line1"><span>${fmtMD(d.date)}</span><span>${d.inTime || '—'}〜${d.outTime || '—'}</span><span>休憩${d.breakMin}分</span></div>
-        <div class="payroll-day-line2"><span>${d.warning ? '⚠️ ' + d.warning : '実働 ' + fmtMinutesJP(d.workedMin)}</span><span>¥${d.wage.toLocaleString()}/h</span><span>¥${Math.round(d.amount).toLocaleString()}</span></div>
+        <div class="payroll-day-line1"><span>${fmtMD(d.date)}</span><span>${d.sessionsText}</span></div>
+        <div class="payroll-day-line2"><span>実働 ${fmtMinutesJP(d.workedMin)}</span><span>¥${d.wage.toLocaleString()}/h</span><span>¥${Math.round(d.amount).toLocaleString()}</span></div>
       </div>
     `).join('');
     return `
@@ -1626,7 +1699,7 @@ function renderPayroll() {
           <div class="payroll-name">${mem.member}</div>
           <div class="payroll-amount">¥${Math.round(mem.amount).toLocaleString()}</div>
         </div>
-        <div class="payroll-meta">${mem.workDays}日 ・ ${fmtMinutesJP(mem.workedMin)} ／ ${wageText}</div>
+        <div class="payroll-meta">${mem.workDays}日 ・ ${hoursText} ／ ${wageText}</div>
         ${warningsHtml}
         <div class="payroll-detail" id="payroll-detail-${idx}">${detailRows}</div>
       </div>
@@ -1634,18 +1707,22 @@ function renderPayroll() {
   }).join('');
 }
 
-// CSV書き出し（UTF-8 BOM付き。支給額は最終表示時のみ四捨五入）
+// CSV書き出し（UTF-8 BOM付き。支給額は最終表示時のみ四捨五入。実働(分)と丸め後(分)の両列を出力）
 function exportPayrollCSV() {
   const data = computePayroll(payrollMonth);
   if (!data.members.length) { toast('⚠️ この月の給与データがありません'); return; }
-  const h = 'メンバー名,勤務日数,実働時間(分),実働時間(表示),時給,支給額,警告';
+  const h = 'メンバー名,勤務日数,実働時間(分),丸め後(分),実働時間(表示),時給,支給額,警告';
   const rows = data.members.map(mem => {
     const wageAtEnd = resolveWage(mem.member, monthEndStr(payrollMonth), state.wages || []);
+    const hoursText = mem.workedMin === mem.roundedMin
+      ? fmtMinutesJP(mem.workedMin)
+      : `${fmtMinutesJP(mem.workedMin)} → ${fmtMinutesJP(mem.roundedMin)}`;
     return [
       `"${mem.member}"`,
       mem.workDays,
       mem.workedMin,
-      `"${fmtMinutesJP(mem.workedMin)}"`,
+      mem.roundedMin,
+      `"${hoursText}"`,
       wageAtEnd,
       Math.round(mem.amount),
       `"${mem.warnings.join('; ')}"`
@@ -2013,26 +2090,33 @@ function updateMySettingsInfo() {
   else el.textContent = `現在の設定: ${myName}さん`;
 }
 
-// 個人カードのHTMLを組み立てる（状態駆動：未出勤／出勤中／退勤済）
+// 個人カードのHTMLを組み立てる（状態駆動：未出勤／出勤中／退勤済。複数セッション対応）
 // ボタンは既存の tapAttendTile(myName) を呼ぶだけ（勤怠ロジックはここで複製しない）
 function buildPersonalCardHTML() {
   const date = getTodayJST();
-  const att = (state.attendances || []).find(a => a.date === date && a.member === myName);
+  const now = getTimeJST();
+  const sessions = (state.attendances || []).filter(a => a.date === date && a.member === myName);
+  const openSession = sessions.find(a => a.time && !a.leaveTime);
   const safe = myName.replace(/'/g, "\\'");
 
   let stateClass, statusText, buttonHtml = '', hintHtml = '';
-  if (!att || (!att.time && att.leaveTime)) {
+  if (!sessions.length) {
     stateClass = 'state-none';
     statusText = 'まだ出勤していません';
     buttonHtml = `<button class="today-btn today-btn-in" onclick="tapAttendTile('${safe}')">🌅 出勤する</button>`;
     hintHtml = `<div class="today-hint">出勤すると、このボタンが「退勤する」に変わります</div>`;
-  } else if (att.time && !att.leaveTime) {
+  } else if (openSession) {
     stateClass = 'state-in';
-    statusText = `${att.time}〜　${calcElapsed(att.time)}`;
+    const prefix = sessions.length >= 2 ? `${sessions.length}回目の勤務中　` : '';
+    statusText = `${prefix}${openSession.time}〜　${calcElapsed(openSession.time)}`;
     buttonHtml = `<button class="today-btn today-btn-out" onclick="tapAttendTile('${safe}')">🌇 退勤する</button>`;
   } else {
     stateClass = 'state-out';
-    statusText = `🏁 本日おつかれさまでした　${att.time || ''}〜${att.leaveTime}`;
+    const totalWorked = sessions.reduce((sum, s) => sum + Math.max(0, sessionWorkedMinutes(s, now)), 0);
+    const last = sessions.slice().sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(-1)[0];
+    statusText = `🏁 本日おつかれさまでした　実働${fmtMinutesJP(totalWorked)}（${last.time || ''}〜${last.leaveTime}）`;
+    buttonHtml = `<button class="today-btn today-btn-in" onclick="tapAttendTile('${safe}')">🌅 再出勤する</button>`;
+    hintHtml = `<div class="today-hint">もう一度出勤する場合はボタンを押してください</div>`;
   }
 
   return `
@@ -2065,15 +2149,17 @@ function renderAttendTiles() {
   }
 
   const today = getTodayJST();
+  const now = getTimeJST();
   const todayAttends = (state.attendances || []).filter(a => a.date === today);
 
-  // サマリー集計（全メンバー対象・現行どおり）
-  let cntIn = 0, cntWork = 0, cntOut = 0;
+  // サマリー集計（人単位。セッション数ではない）
+  let cntWork = 0, cntOut = 0;
   state.members.forEach(m => {
-    const att = todayAttends.find(a => a.member === m);
-    if (!att) return;
-    if (att.leaveTime) cntOut++;
-    else if (att.time) { cntIn++; cntWork++; }
+    const sessions = todayAttends.filter(a => a.member === m);
+    if (!sessions.length) return;
+    const hasOpen = sessions.some(a => a.time && !a.leaveTime);
+    if (hasOpen) cntWork++;
+    else cntOut++;
   });
 
   if (summaryEl) {
@@ -2090,35 +2176,53 @@ function renderAttendTiles() {
     : state.members;
 
   el.innerHTML = visibleMembers.map(m => {
-    const att = todayAttends.find(a => a.member === m);
-    let statusClass, statusText, badge, editBreakBtn = '';
-    if (att && att.leaveTime) {
-      statusClass = 'status-out';
-      const bm = Number(att.breakMin) || 0;
-      const worked = calcWorkedMinutes(att.time, att.leaveTime, bm);
-      const workedText = worked < 0 ? '⚠️ 実働不明' : `実働${fmtMinutesJP(worked)}`;
-      statusText = `${att.time || '?'}〜${att.leaveTime} ・ 休憩${bm}分 ・ ${workedText}`;
-      badge = '🏁';
-      const safeEdit = m.replace(/'/g, "\\'");
-      editBreakBtn = `<button class="attend-tile-edit-break admin-only" onclick="event.stopPropagation(); openEditBreakDialog('${safeEdit}','${att.date}','${att.time||''}','${att.leaveTime||''}',${bm})">✏️</button>`;
-    } else if (att && att.time) {
+    const sessions = todayAttends
+      .filter(a => a.member === m)
+      .slice()
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    const safe = m.replace(/'/g, "\\'");
+
+    if (!sessions.length) {
+      return `<div class="attend-tile status-none"
+        onpointerdown="tileTouchStart('${safe}')" onpointerup="tileTouchEnd('${safe}')"
+        onpointerleave="tileTouchCancel()" onpointercancel="tileTouchCancel()">
+        <div class="attend-tile-avatar">${initials(m)}</div>
+        <div class="attend-tile-info">
+          <div class="attend-tile-name">${m}</div>
+          <div class="attend-tile-sessions">未出勤</div>
+        </div>
+        <div class="attend-tile-badge">⬜</div>
+      </div>`;
+    }
+
+    const openSession = sessions.find(a => a.time && !a.leaveTime);
+    const sessionsText = sessions.map(s => {
+      if (s.leaveTime) return `${s.time || '?'}〜${s.leaveTime}`;
+      return `${s.time || '?'}〜　${calcElapsed(s.time)}`;
+    }).join(' ／ ');
+    const totalWorked = sessions.reduce((sum, s) => sum + Math.max(0, sessionWorkedMinutes(s, now)), 0);
+
+    let statusClass, summaryText, badge;
+    if (openSession) {
       statusClass = 'status-in';
-      const elapsed = calcElapsed(att.time);
-      statusText = `${att.time}〜　${elapsed}`;
+      const prefix = sessions.length >= 2 ? `${sessions.length}回目の` : '';
+      summaryText = `${prefix}勤務中 ・ 本日の実働 ${fmtMinutesJP(totalWorked)}`;
       badge = '🚀';
     } else {
-      statusClass = 'status-none';
-      statusText = '未出勤';
-      badge = '⬜';
+      statusClass = 'status-out';
+      summaryText = `退勤済 ・ 実働 ${fmtMinutesJP(totalWorked)}　タップで再出勤`;
+      badge = '🏁';
     }
-    const safe = m.replace(/'/g, "\\'");
-    return `<div class="attend-tile ${statusClass}" onclick="tapAttendTile('${safe}')">
+
+    return `<div class="attend-tile ${statusClass}"
+      onpointerdown="tileTouchStart('${safe}')" onpointerup="tileTouchEnd('${safe}')"
+      onpointerleave="tileTouchCancel()" onpointercancel="tileTouchCancel()">
       <div class="attend-tile-avatar">${initials(m)}</div>
       <div class="attend-tile-info">
         <div class="attend-tile-name">${m}</div>
-        <div class="attend-tile-status">${statusText}</div>
+        <div class="attend-tile-sessions">${sessionsText}</div>
+        <div class="attend-tile-summary">${summaryText}</div>
       </div>
-      ${editBreakBtn}
       <div class="attend-tile-badge">${badge}</div>
     </div>`;
   }).join('');
@@ -2126,12 +2230,14 @@ function renderAttendTiles() {
 
 // ---- 退勤・休憩入力ダイアログ ----
 // editMode=false: 退勤時のダイアログ（confirmBreakDialogでupdateAttendにbreakMinを添えて送信）
-// editMode=true : 退勤済タイルの休憩修正（管理者のみ・updateBreakのみ送信、leaveTimeは変更しない）
+// editMode=true : 管理者の長押しメニューからの休憩修正（updateBreakをIDで送信、leaveTimeは変更しない）
 let breakDialogCtx = null;
 
-function openBreakDialog(member, date, inTime) {
+// sessionCount: この退勤がその日の何回目のセッションか（1件目=60分初期値、2件目以降=0分初期値）
+function openBreakDialog(member, date, inTime, sessionCount) {
   const now = getTimeJST();
-  breakDialogCtx = { member, date, inTime, now, breakMin: 60, editMode: false };
+  const defaultBreak = (sessionCount || 1) >= 2 ? 0 : 60;
+  breakDialogCtx = { member, date, inTime, now, breakMin: defaultBreak, editMode: false };
   document.getElementById('break-modal-title').textContent = `${member} さん 退勤`;
   document.getElementById('break-time-range').textContent = `${inTime || '?'} 〜 ${now}`;
   document.getElementById('break-confirm-btn').textContent = '🌇 退勤する';
@@ -2139,9 +2245,9 @@ function openBreakDialog(member, date, inTime) {
   document.getElementById('break-modal').classList.add('open');
 }
 
-// 管理者用：退勤済タイルの休憩を修正するダイアログ
-function openEditBreakDialog(member, date, inTime, leaveTime, currentBreak) {
-  breakDialogCtx = { member, date, inTime, now: leaveTime, breakMin: Number(currentBreak) || 0, editMode: true };
+// 管理者用：長押しメニューから開く休憩修正ダイアログ（セッションIDで指定）
+function openEditBreakDialog(member, id, date, inTime, leaveTime, currentBreak) {
+  breakDialogCtx = { member, id, date, inTime, now: leaveTime, breakMin: Number(currentBreak) || 0, editMode: true };
   document.getElementById('break-modal-title').textContent = `${member} さん 休憩修正`;
   document.getElementById('break-time-range').textContent = `${inTime || '?'} 〜 ${leaveTime || '?'}`;
   document.getElementById('break-confirm-btn').textContent = '✅ 修正する';
@@ -2186,10 +2292,10 @@ async function confirmBreakDialog() {
   closeBreakModal();
 
   if (ctx.editMode) {
-    // 休憩修正のみ（管理者用・updateBreak。leaveTimeは変更しない）
+    // 休憩修正のみ（管理者用・updateBreak。IDで指定、leaveTimeは変更しない）
     if (!gasUrl) {
       if (!state.attendances) state.attendances = [];
-      const idx = state.attendances.findIndex(a => a.date === ctx.date && a.member === ctx.member);
+      const idx = state.attendances.findIndex(a => String(a.id) === String(ctx.id));
       if (idx >= 0) state.attendances[idx].breakMin = ctx.breakMin;
       save();
       renderAttendTiles();
@@ -2198,7 +2304,7 @@ async function confirmBreakDialog() {
     }
     toast('⏳ 修正中...');
     try {
-      await gasGet({ action: 'updateBreak', data: JSON.stringify({ date: ctx.date, member: ctx.member, breakMin: ctx.breakMin }) });
+      await gasGet({ action: 'updateBreak', data: JSON.stringify({ id: ctx.id, date: ctx.date, member: ctx.member, breakMin: ctx.breakMin }) });
       await syncAll(true);
       toast('休憩時間を修正しました');
     } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
@@ -2206,12 +2312,12 @@ async function confirmBreakDialog() {
     return;
   }
 
-  // 退勤（既存フロー。updateAttendにbreakMinを追加して送信）
+  // 退勤：その日・そのメンバーの未クローズのセッションをupdateAttendで更新（breakMinを添えて送信）
   const member = ctx.member, date = ctx.date, inTime = ctx.inTime, time = ctx.now, breakMin = ctx.breakMin;
 
   if (!gasUrl) {
     if (!state.attendances) state.attendances = [];
-    const idx = state.attendances.findIndex(a => a.date === date && a.member === member);
+    const idx = state.attendances.findIndex(a => a.date === date && a.member === member && a.time && !a.leaveTime);
     if (idx >= 0) {
       state.attendances[idx].leaveTime = time;
       state.attendances[idx].breakMin = breakMin;
@@ -2226,7 +2332,13 @@ async function confirmBreakDialog() {
 
   toast('⏳ 退勤を記録中...');
   try {
-    await gasGet({ action:'updateAttend', data: JSON.stringify({date, member, leaveTime: time, breakMin}) });
+    const res = await gasGet({ action:'updateAttend', data: JSON.stringify({date, member, leaveTime: time, breakMin}) });
+    if (res && res.ok === false) {
+      toast(res.reason === 'no_open_session' ? '⚠️ 出勤中の記録が見つかりませんでした。画面を更新します' : '⚠️ 記録に失敗しました');
+      await syncAll(true);
+      renderAttendTiles();
+      return;
+    }
     document.getElementById('rec-end').value = time;
     document.getElementById('rec-start').value = inTime;
     await syncAll(true);
@@ -2235,8 +2347,83 @@ async function confirmBreakDialog() {
   renderAttendTiles();
 }
 
-// タイルタップで出勤/退勤をトグル
+// ---- 管理者用：タイル長押しメニュー（本日のセッション一覧・修正/取消） ----
+let longPressTimer = null;
+let longPressFired = false;
+
+// 非管理者は長押し判定自体を行わない（何も起きない）
+function tileTouchStart(member) {
+  longPressFired = false;
+  if (!isAdmin) return;
+  longPressTimer = setTimeout(() => {
+    longPressFired = true;
+    openSessionMenu(member);
+  }, 600);
+}
+
+function tileTouchEnd(member) {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  if (longPressFired) { longPressFired = false; return; } // 長押しが発火済みなら通常タップは実行しない
+  tapAttendTile(member);
+}
+
+function tileTouchCancel() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  longPressFired = false;
+}
+
+function openSessionMenu(member) {
+  const date = getTodayJST();
+  const sessions = (state.attendances || [])
+    .filter(a => a.date === date && a.member === member)
+    .slice()
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  if (!sessions.length) return;
+
+  document.getElementById('session-menu-title').textContent = `${member} さんの本日の記録`;
+  const safe = member.replace(/'/g, "\\'");
+  document.getElementById('session-menu-list').innerHTML = sessions.map((s, i) => {
+    const timeText = s.leaveTime ? `${s.time || '?'}〜${s.leaveTime}` : `${s.time || '?'}〜（勤務中）`;
+    const bm = Number(s.breakMin) || 0;
+    const editDisabled = s.leaveTime ? '' : 'disabled';
+    return `
+      <div class="session-menu-item">
+        <div class="session-menu-time">${i + 1}回目　${timeText} ・ 休憩${bm}分</div>
+        <div class="session-menu-actions">
+          <button class="btn btn-secondary btn-sm" ${editDisabled} onclick="closeSessionMenu(); openEditBreakDialog('${safe}','${s.id}','${date}','${s.time||''}','${s.leaveTime||''}',${bm})">休憩を修正</button>
+          <button class="btn btn-danger btn-sm" onclick="cancelSession('${safe}','${s.id}')">この回を取り消す</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('session-menu-modal').classList.add('open');
+}
+
+function closeSessionMenu() {
+  document.getElementById('session-menu-modal').classList.remove('open');
+}
+
+async function cancelSession(member, id) {
+  if (!confirm(`${member}さんのこの回の記録を取り消しますか？`)) return;
+  closeSessionMenu();
+  if (!gasUrl) {
+    state.attendances = (state.attendances || []).filter(a => String(a.id) !== String(id));
+    save();
+    renderAttendTiles();
+    toast('取り消しました');
+    return;
+  }
+  try {
+    await gasGet({ action: 'deleteAttend', data: JSON.stringify({ id }) });
+    await syncAll(true);
+    toast('取り消しました');
+  } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
+  renderAttendTiles();
+}
+
+// タイルタップで出勤/再出勤/退勤
 // スプレッドシートが正：クラウドへは操作1件ごとの命令のみ送信し、都度☁️同期で再取得する
+// 状態判定はその日・そのメンバーの全セッションで行う（date+memberで1行を特定する処理は行わない）
 async function tapAttendTile(member) {
   const date = getTodayJST();
   const time = getTimeJST();
@@ -2244,58 +2431,47 @@ async function tapAttendTile(member) {
   if (!gasUrl) {
     // gasUrl未設定時のみ従来のローカルのみ動作を踏襲
     if (!state.attendances) state.attendances = [];
-    const idx = state.attendances.findIndex(a => a.date === date && a.member === member);
-    let actionType;
-    if (idx < 0) {
-      state.attendances.push({ id: Date.now() + Math.random(), date, member, time, leaveTime: '' });
-      actionType = 'in';
-    } else if (state.attendances[idx].time && !state.attendances[idx].leaveTime) {
-      openBreakDialog(member, date, state.attendances[idx].time);
+    const daySessions = state.attendances.filter(a => a.date === date && a.member === member);
+    const openIdx = state.attendances.findIndex(a => a.date === date && a.member === member && a.time && !a.leaveTime);
+
+    if (openIdx >= 0) {
+      openBreakDialog(member, date, state.attendances[openIdx].time, daySessions.length);
       return;
-    } else if (state.attendances[idx].leaveTime) {
-      if (!confirm(`${member}さんの本日の勤怠を取り消しますか？`)) return;
-      state.attendances.splice(idx, 1);
-      actionType = 'cancel';
-    } else {
-      state.attendances[idx].time = time;
-      actionType = 'in';
     }
+
+    // 未出勤 or 全セッションがクローズ済み → 新規セッション追加（出勤 or 再出勤）
+    state.attendances.push({ id: Date.now() + Math.random(), date, member, time, leaveTime: '', breakMin: 0 });
     save();
     renderAttendTiles();
-    let localMsg;
-    if (actionType === 'in') localMsg = `🌅 ${member}さん 出勤`;
-    else if (actionType === 'out') localMsg = `🌇 ${member}さん 退勤`;
-    else localMsg = `${member}さんの勤怠を取り消しました`;
-    toast(localMsg);
+    toast(daySessions.length === 0 ? `🌅 ${member}さん 出勤` : `🌅 ${member}さん 再出勤`);
     return;
   }
 
-  const att = (state.attendances||[]).find(a => a.date === date && a.member === member);
+  const daySessions = (state.attendances || []).filter(a => a.date === date && a.member === member);
+  const openSession = daySessions.find(a => a.time && !a.leaveTime);
 
-  if (!att || (!att.time && att.leaveTime)) {
-    // 未出勤 → 出勤：1件追加
-    toast('⏳ 出勤を記録中...');
-    try {
-      await gasGet({ action:'addAttend', data: JSON.stringify({date, member, time}) });
-      await syncAll(true);
-      toast(`🌅 ${member}さん 出勤`);
-    } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
-  } else if (att.time && !att.leaveTime) {
+  if (openSession) {
     // 出勤中 → 退勤：休憩入力ダイアログを開く（送信は confirmBreakDialog() で行う）
-    openBreakDialog(member, date, att.time);
+    openBreakDialog(member, date, openSession.time, daySessions.length);
     return;
-  } else {
-    // 退勤済 → 取消（管理者のみ・クラウドの該当1件を直接削除）
-    if (!isAdmin) { toast('⚠️ 取り消しは管理者のみ可能です'); return; }
-    if (!confirm(`${member}さんの本日の勤怠を取り消しますか？`)) return;
-    try {
-      await gasGet({ action:'deleteAttend', data: JSON.stringify({date, member}) });
-      await syncAll(true);
-      toast('取り消しました');
-    } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
   }
+
+  // 未出勤 or 退勤済（全クローズ） → 出勤/再出勤（addAttend。二重出勤防止はサーバー側でも判定）
+  toast(daySessions.length === 0 ? '⏳ 出勤を記録中...' : '⏳ 再出勤を記録中...');
+  try {
+    const res = await gasGet({ action:'addAttend', data: JSON.stringify({date, member, time}) });
+    if (res && res.ok === false) {
+      toast(res.reason === 'already_open' ? '⚠️ すでに出勤中でした。画面を更新します' : '⚠️ 記録に失敗しました');
+      await syncAll(true);
+      renderAttendTiles();
+      return;
+    }
+    await syncAll(true);
+    toast(daySessions.length === 0 ? `🌅 ${member}さん 出勤` : `🌅 ${member}さん 再出勤`);
+  } catch(e) { toast('⚠️ 送信に失敗しました'); return; }
   renderAttendTiles();
 }
+
 
 // 記録ページ：作業者選択時に出勤時刻を自動セット
 function applyAttendTime() {
@@ -2307,10 +2483,11 @@ function applyAttendTime() {
     document.getElementById('rec-start').value = '09:00';
     return;
   }
-  // 選択したメンバーの中で最も早い出勤時刻を取得
+  // 選択したメンバーの中で最も早い出勤時刻を取得（複数セッションがあればその中の最速）
   const times = selected.map(m => {
-    const att = state.attendances.find(a => a.date === date && a.member === m);
-    return att ? att.time : null;
+    const sessions = state.attendances.filter(a => a.date === date && a.member === m && a.time);
+    if (!sessions.length) return null;
+    return sessions.map(s => s.time).sort()[0];
   }).filter(Boolean).sort(); // 文字列ソートで HH:MM は正しく昇順になる
   if (times.length > 0) {
     // 最も早い出勤時刻を開始時間にセット
