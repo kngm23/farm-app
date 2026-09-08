@@ -290,6 +290,17 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
 .payroll-day-line1{display:flex;gap:8px;margin-bottom:2px}
 .payroll-day-line1 span:first-child{font-weight:700;color:var(--text)}
 .payroll-day-line2{display:flex;gap:10px;justify-content:space-between}
+.payroll-total-note{font-size:11px;color:var(--text-hint);text-align:center;margin:-6px 0 14px}
+.payroll-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
+.payroll-badge-part{background:var(--bg);color:var(--text-sub);border:1px solid var(--border)}
+.payroll-badge-full{background:var(--green);color:#fff}
+.payroll-breakdown{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}
+.payroll-break-box{background:var(--bg);border-radius:8px;padding:8px 4px;text-align:center}
+.payroll-break-label{font-size:10px;color:var(--text-sub);margin-bottom:3px}
+.payroll-break-val{font-size:14px;font-weight:700;color:var(--text)}
+.payroll-note{font-size:11px;color:var(--text-hint);margin-top:8px}
+.payroll-day-row.weekend{background:#FFF3E8;margin:0 -16px;padding:6px 16px;border-radius:6px}
+.payroll-day-total{font-weight:700;border-top:2px solid var(--border);margin-top:6px;padding-top:10px}
 </style>
 </head>
 <body>
@@ -419,6 +430,7 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
       <div class="stat-box"><div class="stat-label">支給総額</div><div class="stat-val" id="payroll-total">¥0</div></div>
       <div class="stat-box"><div class="stat-label">総実働時間</div><div class="stat-val" id="payroll-total-hours">0h</div></div>
     </div>
+    <div class="payroll-total-note">正社員は時間外分のみ</div>
     <div id="payroll-list"></div>
     <button class="btn btn-secondary" onclick="exportPayrollCSV()" style="margin-top:6px">📥 CSV書き出し</button>
   </div>
@@ -541,7 +553,7 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
     <div class="break-time-range" id="break-time-range"></div>
     <div class="break-stepper">
       <button class="break-step-btn" onclick="adjustBreak(-5)">−</button>
-      <div class="break-value"><span id="break-value-num">60</span>分</div>
+      <div class="break-value"><span id="break-value-num">0</span>分</div>
       <button class="break-step-btn" onclick="adjustBreak(5)">＋</button>
     </div>
     <div class="break-chips">
@@ -987,6 +999,19 @@ function fmtMinutesJP(mins) {
   if (m === 0) return `${h}時間`;
   return `${h}時間${m}分`;
 }
+// 正社員の早出/残業/休日ボックス用（"2:30"形式）
+function fmtHM(mins) {
+  const m2 = Math.max(0, Math.round(mins));
+  const h = Math.floor(m2 / 60), m = m2 % 60;
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+// "2026-09-06" → "土"
+function dowLetterJP(dateStr) {
+  const parts = String(dateStr).split('-').map(Number);
+  if (parts.length < 3 || parts.some(isNaN)) return '';
+  const dow = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+  return ['日', '月', '火', '水', '木', '金', '土'][dow];
+}
 // "2026-08-05" → "8/5"
 function fmtMD(dateStr) {
   if (!dateStr) return '';
@@ -1001,6 +1026,43 @@ function resolveWage(member, dateStr, wages) {
   if (!candidates.length) return 0;
   candidates.sort((a, b) => a.from.localeCompare(b.from));
   return Number(candidates[candidates.length - 1].wage) || 0;
+}
+// 指定メンバー・指定日に適用される時給と雇用区分を解決する（正社員の時間外集計用）
+// 解決ルールはresolveWageと同じ。該当行が無ければ時給0・パート扱い
+function resolveWageInfo(member, dateStr, wages) {
+  const candidates = (wages || []).filter(w => w.member === member && w.from && w.from <= dateStr);
+  if (!candidates.length) return { wage: 0, employment: 'パート' };
+  candidates.sort((a, b) => a.from.localeCompare(b.from));
+  const latest = candidates[candidates.length - 1];
+  return { wage: Number(latest.wage) || 0, employment: latest.employment === '正社員' ? '正社員' : 'パート' };
+}
+// 所定時間 8:30〜17:30（分換算）。正社員の時間外集計にのみ使用
+const REGULAR_START_MIN = 8 * 60 + 30;  // 510
+const REGULAR_END_MIN = 17 * 60 + 30;   // 1050
+// "HH:MM" を分に変換
+function timeToMinutes(t) {
+  if (!t) return null;
+  const parts = String(t).split(':').map(Number);
+  if (parts.length < 2 || parts.some(isNaN)) return null;
+  return parts[0] * 60 + parts[1];
+}
+// 日付(yyyy-MM-dd)が土曜・日曜かどうか
+function isWeekendDate(dateStr) {
+  const parts = String(dateStr).split('-').map(Number);
+  if (parts.length < 3 || parts.some(isNaN)) return false;
+  const dow = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+  return dow === 0 || dow === 6;
+}
+// 1セッション（出勤〜退勤）を早出/残業/所定内/休日に分ける（分単位・休憩は考慮しない生の内訳）
+// 平日: 8:30より前=早出、17:30より後=残業、その間=所定内。土日: 全て休日
+function splitSessionOvertime(dateStr, startTime, endTime) {
+  const s = timeToMinutes(startTime), e = timeToMinutes(endTime);
+  if (s === null || e === null || e <= s) return { early: 0, over: 0, regular: 0, holiday: 0 };
+  if (isWeekendDate(dateStr)) return { early: 0, over: 0, regular: 0, holiday: e - s };
+  const early = Math.max(0, Math.min(e, REGULAR_START_MIN) - s);
+  const over = Math.max(0, e - Math.max(s, REGULAR_END_MIN));
+  const regular = Math.max(0, Math.min(e, REGULAR_END_MIN) - Math.max(s, REGULAR_START_MIN));
+  return { early, over, regular, holiday: 0 };
 }
 // 分を15分単位で切り上げる（月合計にのみ適用。日ごとの計算には使わない）
 function ceilTo15(mins) {
@@ -1553,6 +1615,9 @@ function computePayroll(yyyyMM) {
     const sessions = byMember[member] || [];
     if (!sessions.length) return; // その月に記録が無いメンバーは表示しない
 
+    // 雇用区分は月末時点の時給マスタで解決する（月の途中の改定は時給と同じ扱い）
+    const employment = resolveWageInfo(member, monthEndStr(yyyyMM), wages).employment;
+
     // 日ごとにグループ化（勤務日数・日別内訳は日単位でまとめる）
     const byDate = {};
     sessions.forEach(a => {
@@ -1565,7 +1630,9 @@ function computePayroll(yyyyMM) {
     const warnings = [];
     let hasUnresolvedWage = false;
     const dayDetails = [];
-    const dayWorkedByWage = {}; // 時給ごとの実働分合計（丸めは月合計時のみ・区間ごとに行う）
+    const dayWorkedByWage = {}; // 時給ごとの集計分合計（パート=実働分／正社員=時間外分。丸めは月合計時のみ・区間ごとに行う）
+    let monthEarly = 0, monthOver = 0, monthHoliday = 0; // 正社員用：早出・残業・休日の月合計（丸めない）
+    let monthRawWorked = 0; // 雇用区分によらない総実働分（月合計・丸めない。CSV「実働時間(分)」用）
 
     dates.forEach(date => {
       const daySessions = byDate[date].slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
@@ -1573,6 +1640,8 @@ function computePayroll(yyyyMM) {
       let dayWorked = 0;
       let dayHasValidSession = false;
       const sessionTexts = [];
+      // 正社員の時間外切り出し用（休憩を反映する前の生の内訳を積み上げる）
+      let dayEarlyRaw = 0, dayOverRaw = 0, dayRegularRaw = 0, dayHolidayRaw = 0, dayBreakTotal = 0;
 
       daySessions.forEach(s => {
         if (s.time && !s.leaveTime) {
@@ -1596,29 +1665,57 @@ function computePayroll(yyyyMM) {
           return;
         }
 
-        dayWorked += rawWorked; // 日ごとの丸めは入れない
+        dayWorked += rawWorked; // 日ごとの丸めは入れない（パート用・現行のまま）
         dayHasValidSession = true;
+
+        // 正社員用：休憩を差し引く前の生の内訳を積み上げる（時刻の比較は分換算）
+        const parts = splitSessionOvertime(date, s.time, s.leaveTime);
+        dayEarlyRaw += parts.early;
+        dayOverRaw += parts.over;
+        dayRegularRaw += parts.regular;
+        dayHolidayRaw += parts.holiday;
+        dayBreakTotal += bm;
       });
 
       if (dayHasValidSession) workDays++; // 勤務日数は日単位（1日に複数回打っても1日）
 
+      // 正社員：休憩は所定内分からのみ差し引き、所定内実働がマイナスになった超過分は
+      // 早出→残業→休日の順で減算する（表示用の内訳にも反映）
+      const regularWorked = dayRegularRaw - dayBreakTotal;
+      const excess = Math.max(0, -regularWorked);
+      let early = dayEarlyRaw, over = dayOverRaw, holiday = dayHolidayRaw;
+      let remain = excess;
+      const cut1 = Math.min(early, remain); early -= cut1; remain -= cut1;
+      const cut2 = Math.min(over, remain); over -= cut2; remain -= cut2;
+      const cut3 = Math.min(holiday, remain); holiday -= cut3; remain -= cut3;
+      const dayOvertimeTotal = Math.max(0, early + over + holiday);
+
+      monthEarly += early;
+      monthOver += over;
+      monthHoliday += holiday;
+      monthRawWorked += dayWorked; // 雇用区分によらない総実働（CSV用）
+
+      // 雇用区分によって支給額の対象になる分数を切り替える（パートは実働分＝現行のまま、正社員は時間外分のみ）
+      const contribution = employment === '正社員' ? dayOvertimeTotal : dayWorked;
+
       const wage = resolveWage(member, date, wages);
-      if (dayWorked > 0 && wage <= 0) hasUnresolvedWage = true;
+      if (contribution > 0 && wage <= 0) hasUnresolvedWage = true;
       const wageKey = String(wage);
-      dayWorkedByWage[wageKey] = (dayWorkedByWage[wageKey] || 0) + dayWorked;
+      dayWorkedByWage[wageKey] = (dayWorkedByWage[wageKey] || 0) + contribution;
 
       dayDetails.push({
         date,
         sessionsText: sessionTexts.join(' ／ ') || '—',
         workedMin: dayWorked,
         wage,
-        amount: wage > 0 ? (dayWorked / 60 * wage) : 0
+        amount: wage > 0 ? (dayWorked / 60 * wage) : 0,
+        early, over, holiday, overtimeTotal: dayOvertimeTotal
       });
     });
 
     if (hasUnresolvedWage) warnings.push('時給が未設定です');
 
-    // 月合計：時給が同じ区間ごとに実働分を15分単位で切り上げてから金額化し、合算する
+    // 月合計：時給が同じ区間ごとに集計分を15分単位で切り上げてから金額化し、合算する（パート・正社員共通の丸め方式）
     let rawMinSum = 0, roundedMinSum = 0, amountSum = 0;
     Object.keys(dayWorkedByWage).forEach(wageKey => {
       const wage = Number(wageKey);
@@ -1634,7 +1731,10 @@ function computePayroll(yyyyMM) {
     grandRoundedMin += roundedMinSum;
     grandAmount += amountSum;
 
-    result.push({ member, amount: amountSum, workDays, workedMin: rawMinSum, roundedMin: roundedMinSum, warnings, days: dayDetails });
+    result.push({
+      member, employment, amount: amountSum, workDays, workedMin: rawMinSum, roundedMin: roundedMinSum,
+      warnings, days: dayDetails, monthEarly, monthOver, monthHoliday, monthRawWorked
+    });
   });
 
   result.sort((a, b) => b.amount - a.amount); // 支給額の降順
@@ -1679,6 +1779,10 @@ function renderPayroll() {
   }
 
   listEl.innerHTML = data.members.map((mem, idx) => {
+    const isFull = mem.employment === '正社員';
+    const badgeHtml = isFull
+      ? `<span class="payroll-badge payroll-badge-full">正社員</span>`
+      : `<span class="payroll-badge payroll-badge-part">パート</span>`;
     const wageAtEnd = resolveWage(mem.member, monthEndStr(payrollMonth), state.wages || []);
     const wageText = wageAtEnd > 0 ? `¥${wageAtEnd.toLocaleString()}/h` : '—';
     const hoursText = mem.workedMin === mem.roundedMin
@@ -1687,19 +1791,51 @@ function renderPayroll() {
     const warningsHtml = mem.warnings.length
       ? `<div class="payroll-warnings">${mem.warnings.map(w => `<div class="payroll-warn">⚠️ ${w}</div>`).join('')}</div>`
       : '';
-    const detailRows = mem.days.map(d => `
-      <div class="payroll-day-row">
-        <div class="payroll-day-line1"><span>${fmtMD(d.date)}</span><span>${d.sessionsText}</span></div>
-        <div class="payroll-day-line2"><span>実働 ${fmtMinutesJP(d.workedMin)}</span><span>¥${d.wage.toLocaleString()}/h</span><span>¥${Math.round(d.amount).toLocaleString()}</span></div>
+
+    // メタ行：パートは現行のまま（勤務日数・実働）。正社員は勤務日数の代わりに時間外の時間を出す
+    const metaText = isFull
+      ? `時間外 ${hoursText} ／ ${wageText}`
+      : `${mem.workDays}日 ・ ${hoursText} ／ ${wageText}`;
+
+    // 正社員のみ：早出・残業・休日の3分割ボックス＋注記
+    const breakdownHtml = isFull ? `
+      <div class="payroll-breakdown">
+        <div class="payroll-break-box"><div class="payroll-break-label">早出</div><div class="payroll-break-val">${fmtHM(mem.monthEarly)}</div></div>
+        <div class="payroll-break-box"><div class="payroll-break-label">残業</div><div class="payroll-break-val">${fmtHM(mem.monthOver)}</div></div>
+        <div class="payroll-break-box"><div class="payroll-break-label">休日</div><div class="payroll-break-val">${fmtHM(mem.monthHoliday)}</div></div>
       </div>
-    `).join('');
+      <div class="payroll-note">月給は含みません。8:30〜17:30の平日勤務は対象外です</div>
+    ` : '';
+
+    // 日別内訳：パートは現行のまま（日付／出勤〜退勤／実働／時給／金額）
+    // 正社員は列構成を変更（日付＋曜日／出勤〜退勤／早出／残業／休日）・土日は背景色・最下部に合計行
+    const detailRows = isFull
+      ? mem.days.map(d => `
+        <div class="payroll-day-row${isWeekendDate(d.date) ? ' weekend' : ''}">
+          <div class="payroll-day-line1"><span>${fmtMD(d.date)} ${dowLetterJP(d.date)}</span><span>${d.sessionsText}</span></div>
+          <div class="payroll-day-line2"><span>早出 ${d.early > 0 ? fmtHM(d.early) : '—'}</span><span>残業 ${d.over > 0 ? fmtHM(d.over) : '—'}</span><span>休日 ${d.holiday > 0 ? fmtHM(d.holiday) : '—'}</span></div>
+        </div>
+      `).join('') + `
+        <div class="payroll-day-row payroll-day-total">
+          <div class="payroll-day-line1"><span>合計</span></div>
+          <div class="payroll-day-line2"><span>早出 ${fmtHM(mem.monthEarly)}</span><span>残業 ${fmtHM(mem.monthOver)}</span><span>休日 ${fmtHM(mem.monthHoliday)}</span></div>
+        </div>
+      `
+      : mem.days.map(d => `
+        <div class="payroll-day-row">
+          <div class="payroll-day-line1"><span>${fmtMD(d.date)}</span><span>${d.sessionsText}</span></div>
+          <div class="payroll-day-line2"><span>実働 ${fmtMinutesJP(d.workedMin)}</span><span>¥${d.wage.toLocaleString()}/h</span><span>¥${Math.round(d.amount).toLocaleString()}</span></div>
+        </div>
+      `).join('');
+
     return `
       <div class="payroll-card">
         <div class="payroll-card-top" onclick="togglePayrollDetail(${idx})">
-          <div class="payroll-name">${mem.member}</div>
+          <div class="payroll-name">${mem.member}${badgeHtml}</div>
           <div class="payroll-amount">¥${Math.round(mem.amount).toLocaleString()}</div>
         </div>
-        <div class="payroll-meta">${mem.workDays}日 ・ ${hoursText} ／ ${wageText}</div>
+        <div class="payroll-meta">${metaText}</div>
+        ${breakdownHtml}
         ${warningsHtml}
         <div class="payroll-detail" id="payroll-detail-${idx}">${detailRows}</div>
       </div>
@@ -1707,22 +1843,24 @@ function renderPayroll() {
   }).join('');
 }
 
-// CSV書き出し（UTF-8 BOM付き。支給額は最終表示時のみ四捨五入。実働(分)と丸め後(分)の両列を出力）
+// CSV書き出し（UTF-8 BOM付き。支給額は最終表示時のみ四捨五入。パートは早出/残業/休日/時間外合計を空欄にする）
 function exportPayrollCSV() {
   const data = computePayroll(payrollMonth);
   if (!data.members.length) { toast('⚠️ この月の給与データがありません'); return; }
-  const h = 'メンバー名,勤務日数,実働時間(分),丸め後(分),実働時間(表示),時給,支給額,警告';
+  const h = 'メンバー名,雇用区分,勤務日数,実働時間(分),早出(分),残業(分),休日(分),時間外合計(分),丸め後(分),時給,支給額,警告';
   const rows = data.members.map(mem => {
+    const isFull = mem.employment === '正社員';
     const wageAtEnd = resolveWage(mem.member, monthEndStr(payrollMonth), state.wages || []);
-    const hoursText = mem.workedMin === mem.roundedMin
-      ? fmtMinutesJP(mem.workedMin)
-      : `${fmtMinutesJP(mem.workedMin)} → ${fmtMinutesJP(mem.roundedMin)}`;
     return [
       `"${mem.member}"`,
+      `"${mem.employment}"`,
       mem.workDays,
-      mem.workedMin,
+      Math.round(mem.monthRawWorked),
+      isFull ? Math.round(mem.monthEarly) : '',
+      isFull ? Math.round(mem.monthOver) : '',
+      isFull ? Math.round(mem.monthHoliday) : '',
+      isFull ? Math.round(mem.monthEarly + mem.monthOver + mem.monthHoliday) : '',
       mem.roundedMin,
-      `"${hoursText}"`,
       wageAtEnd,
       Math.round(mem.amount),
       `"${mem.warnings.join('; ')}"`
@@ -2233,10 +2371,10 @@ function renderAttendTiles() {
 // editMode=true : 管理者の長押しメニューからの休憩修正（updateBreakをIDで送信、leaveTimeは変更しない）
 let breakDialogCtx = null;
 
-// sessionCount: この退勤がその日の何回目のセッションか（1件目=60分初期値、2件目以降=0分初期値）
+// 休憩の初期値は常に0分。必要な人だけ入力する運用（2026-09-08 仕様変更）
 function openBreakDialog(member, date, inTime, sessionCount) {
   const now = getTimeJST();
-  const defaultBreak = (sessionCount || 1) >= 2 ? 0 : 60;
+  const defaultBreak = 0;
   breakDialogCtx = { member, date, inTime, now, breakMin: defaultBreak, editMode: false };
   document.getElementById('break-modal-title').textContent = `${member} さん 退勤`;
   document.getElementById('break-time-range').textContent = `${inTime || '?'} 〜 ${now}`;
