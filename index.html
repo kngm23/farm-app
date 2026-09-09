@@ -641,8 +641,8 @@ if (!state.categories || state.categories.length === 0) {
     { name: 'その他', icon: '📝' }
   ];
 }
-// ★ゼロ設定化：納品後にユーザーが実際のGAS URLへ差し替える
-const DEFAULT_GAS_URL = '★ここにGASのURLを貼る★';
+// ゼロ設定化：GAS URLを内蔵。端末側でURLを保存していればそちらが優先される
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzNezUtc8MLGTwKD_bgo0y7Di598CfcHiKK4CM_ei0BwTXoYpCOqWfK8IW6mzYmb4Ep/exec';
 let gasUrl = localStorage.getItem('gasUrl') || DEFAULT_GAS_URL;
 let myName = localStorage.getItem('myName') || '';
 let editId = null;
