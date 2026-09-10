@@ -1027,6 +1027,10 @@ function resolveWage(member, dateStr, wages) {
   candidates.sort((a, b) => a.from.localeCompare(b.from));
   return Number(candidates[candidates.length - 1].wage) || 0;
 }
+// 時給マスタにその日に適用される行が存在するか（0円と入力されている場合はtrue＝未設定ではない）
+function hasWageRow(member, dateStr, wages) {
+  return (wages || []).some(w => w.member === member && w.from && w.from <= dateStr);
+}
 // 指定メンバー・指定日に適用される時給と雇用区分を解決する（正社員の時間外集計用）
 // 解決ルールはresolveWageと同じ。該当行が無ければ時給0・パート扱い
 function resolveWageInfo(member, dateStr, wages) {
@@ -1037,6 +1041,8 @@ function resolveWageInfo(member, dateStr, wages) {
   return { wage: Number(latest.wage) || 0, employment: latest.employment === '正社員' ? '正社員' : 'パート' };
 }
 // 所定時間 8:30〜17:30（分換算）。正社員の時間外集計にのみ使用
+const LUNCH_START_MIN = 12 * 60;        // 720
+const LUNCH_END_MIN = 13 * 60;         // 780
 const REGULAR_START_MIN = 8 * 60 + 30;  // 510
 const REGULAR_END_MIN = 17 * 60 + 30;   // 1050
 // "HH:MM" を分に変換
@@ -1060,9 +1066,14 @@ function splitSessionOvertime(dateStr, startTime, endTime) {
   if (s === null || e === null || e <= s) return { early: 0, over: 0, regular: 0, holiday: 0 };
   if (isWeekendDate(dateStr)) return { early: 0, over: 0, regular: 0, holiday: e - s };
   const early = Math.max(0, Math.min(e, REGULAR_START_MIN) - s);
-  const over = Math.max(0, e - Math.max(s, REGULAR_END_MIN));
-  const regular = Math.max(0, Math.min(e, REGULAR_END_MIN) - Math.max(s, REGULAR_START_MIN));
-  return { early, over, regular, holiday: 0 };
+  // 昼休憩帯(12:00-13:00)の勤務も時給対象。集計上は「残業」に合算する
+  const lunch = Math.max(0, Math.min(e, LUNCH_END_MIN) - Math.max(s, LUNCH_START_MIN));
+  const evening = Math.max(0, e - Math.max(s, REGULAR_END_MIN));
+  const over = lunch + evening;
+  // 所定内は 8:30-12:00 と 13:00-17:30 の2区間
+  const regularAM = Math.max(0, Math.min(e, LUNCH_START_MIN) - Math.max(s, REGULAR_START_MIN));
+  const regularPM = Math.max(0, Math.min(e, REGULAR_END_MIN) - Math.max(s, LUNCH_END_MIN));
+  return { early, over, regular: regularAM + regularPM, holiday: 0 };
 }
 // 分を15分単位で切り上げる（月合計にのみ適用。日ごとの計算には使わない）
 function ceilTo15(mins) {
@@ -1681,7 +1692,9 @@ function computePayroll(yyyyMM) {
 
       // 正社員：休憩は所定内分からのみ差し引き、所定内実働がマイナスになった超過分は
       // 早出→残業→休日の順で減算する（表示用の内訳にも反映）
-      const regularWorked = dayRegularRaw - dayBreakTotal;
+      // 正社員は休憩入力を使わない（昼に働く前提のため常に0分扱い）
+      const effectiveBreak = employment === '正社員' ? 0 : dayBreakTotal;
+      const regularWorked = dayRegularRaw - effectiveBreak;
       const excess = Math.max(0, -regularWorked);
       let early = dayEarlyRaw, over = dayOverRaw, holiday = dayHolidayRaw;
       let remain = excess;
@@ -1699,7 +1712,7 @@ function computePayroll(yyyyMM) {
       const contribution = employment === '正社員' ? dayOvertimeTotal : dayWorked;
 
       const wage = resolveWage(member, date, wages);
-      if (contribution > 0 && wage <= 0) hasUnresolvedWage = true;
+      if (contribution > 0 && !hasWageRow(member, date, wages)) hasUnresolvedWage = true;
       const wageKey = String(wage);
       dayWorkedByWage[wageKey] = (dayWorkedByWage[wageKey] || 0) + contribution;
 
