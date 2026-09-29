@@ -301,6 +301,67 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
 .payroll-note{font-size:11px;color:var(--text-hint);margin-top:8px}
 .payroll-day-row.weekend{background:#FFF3E8;margin:0 -16px;padding:6px 16px;border-radius:6px}
 .payroll-day-total{font-weight:700;border-top:2px solid var(--border);margin-top:6px;padding-top:10px}
+/* ===== 給与明細（A4縦）印刷 ===== */
+.payslip-toolbar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px}
+.ps-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.ps-row select{flex:1;min-width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;background:#fff}
+.ps-row .btn-sm{flex:1}
+.ps-label{font-size:12px;color:var(--text-sub)}
+.ps-hint{font-size:11px;color:var(--text-hint);margin-top:4px}
+.payslip-warn{font-size:12px;color:#9A4A06;background:#FFF4E0;border-radius:8px;line-height:1.6}
+.payslip-warn:not(:empty){padding:8px 10px;margin-bottom:8px}
+.ps-preview{overflow:hidden}
+.ps-frame{position:relative;margin:0 auto 14px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.18);background:#fff}
+.ps-frame .ps-page{position:absolute;top:0;left:0;transform-origin:top left}
+.ps-page{width:210mm;min-height:297mm;padding:12mm;background:#fff;color:#1a1a1a;font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif;font-size:9.5pt;line-height:1.4;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ps-page *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ps-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5pt solid #1a1a1a;padding-bottom:2mm}
+.ps-title{font-size:15pt;font-weight:700}
+.ps-issuer{font-size:9pt;text-align:right;line-height:1.5}
+.ps-info{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;margin:3mm 0;font-size:10pt}
+.ps-k{color:#555;font-size:8.5pt;margin-right:2.5mm}
+.ps-name{font-size:13pt;font-weight:700}
+.ps-sum{display:grid;grid-template-columns:repeat(4,1fr);border:0.5pt solid #888;margin-bottom:3mm}
+.ps-sum>div{padding:1.5mm 2.5mm;border-right:0.5pt solid #888}
+.ps-sum>div:last-child{border-right:none}
+.ps-sum .k{font-size:8pt;color:#555}
+.ps-sum .v{font-size:12pt;font-weight:700}
+.ps-sum .pay{background:#F1EFE8}
+.ps-t{width:100%;border-collapse:collapse;margin-bottom:3mm}
+.ps-t th,.ps-t td{border:0.5pt solid #888;padding:0.5mm 1.5mm}
+.ps-t th{background:#F1EFE8;font-weight:700;font-size:8.5pt;text-align:center}
+.ps-t td.r{text-align:right;font-variant-numeric:tabular-nums}
+.ps-t td.c{text-align:center}
+.ps-t tr.tot td{font-weight:700;background:#FAFAF7}
+.ps-t tr.off td{background:#FAECE7}
+.ps-d{table-layout:fixed}
+.ps-d .w-date{width:24%}
+.ps-d .w-sess{width:34%}
+.ps-normal .ps-d{font-size:9pt;line-height:1.25}
+.ps-compact .ps-d{font-size:8pt;line-height:1.15}
+.ps-compact .ps-d th,.ps-compact .ps-d td{padding:0.2mm 1.5mm}
+.ps-hn{font-size:7pt;color:#993C1D;margin-left:1.5mm}
+.ps-sec{font-size:10pt;font-weight:700;margin:1mm 0}
+.ps-cont{font-size:10pt;font-weight:700;border-bottom:1pt solid #1a1a1a;padding-bottom:1.5mm;margin-bottom:2mm}
+.ps-note{font-size:8pt;color:#555;margin:-1mm 0 3mm}
+.ps-sign{border:0.5pt solid #888;padding:3mm 4mm;break-inside:avoid;page-break-inside:avoid}
+.ps-sign-lead{font-size:9.5pt;margin-bottom:5mm}
+.ps-sign-row{display:flex;align-items:flex-end;gap:5mm;font-size:9.5pt}
+.ps-sign-date{flex:1}
+.ps-sign-name{flex:1.3}
+.ps-line{display:inline-block;border-bottom:0.5pt solid #1a1a1a;margin-left:2mm;min-width:36mm;text-align:center}
+.ps-line-name{min-width:44mm}
+.ps-seal{width:14mm;height:14mm;border:0.5pt solid #1a1a1a;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#999;font-size:8pt;flex-shrink:0}
+.ps-pno{text-align:right;font-size:8pt;color:#555;margin-top:2mm}
+#print-area{display:none}
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  html,body{background:#fff !important;min-height:0 !important}
+  body>*:not(#print-area){display:none !important}
+  #print-area{display:block !important}
+  #print-area .ps-page{width:auto;min-height:0;padding:0;break-after:page;page-break-after:always}
+  #print-area .ps-page:last-child{break-after:auto;page-break-after:auto}
+}
 </style>
 </head>
 <body>
@@ -420,12 +481,15 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
 
   <!-- 給与（管理者のみ） -->
   <div id="page-payroll" class="page">
+   <div id="payroll-main">
     <div class="cal-nav">
       <button onclick="payrollMove(-1)">＜</button>
       <span class="cal-title" id="payroll-title"></span>
       <button onclick="payrollMove(1)">＞</button>
     </div>
     <div class="payroll-sub" id="payroll-sub"></div>
+    <div class="payslip-warn" id="payroll-holiday-warn"></div>
+    <button class="btn btn-primary" onclick="openPayslipView()" style="margin-bottom:12px">🖨️ 明細を印刷</button>
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-label">支給総額</div><div class="stat-val" id="payroll-total">¥0</div></div>
       <div class="stat-box"><div class="stat-label">総実働時間</div><div class="stat-val" id="payroll-total-hours">0h</div></div>
@@ -433,6 +497,32 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
     <div class="payroll-total-note">正社員は時間外分のみ</div>
     <div id="payroll-list"></div>
     <button class="btn btn-secondary" onclick="exportPayrollCSV()" style="margin-top:6px">📥 CSV書き出し</button>
+   </div>
+
+   <!-- 給与明細（A4縦）印刷ビュー -->
+   <div id="payslip-view" style="display:none">
+    <div class="payslip-toolbar">
+      <div class="ps-row">
+        <button class="btn btn-secondary btn-sm" onclick="closePayslipView()">＜ 給与に戻る</button>
+      </div>
+      <div class="ps-row">
+        <span class="ps-label">対象期間</span>
+        <select id="ps-from" onchange="onPayslipPeriodChange()"></select>
+        <span class="ps-label">〜</span>
+        <select id="ps-to" onchange="onPayslipPeriodChange()"></select>
+      </div>
+      <div class="ps-row">
+        <select id="ps-member" onchange="psMember=this.value;renderPayslipPreview()"></select>
+      </div>
+      <div class="payslip-warn" id="ps-warn"></div>
+      <div class="ps-row">
+        <button class="btn btn-primary btn-sm" onclick="printPayslipOne()">🖨️ この人を印刷</button>
+        <button class="btn btn-secondary btn-sm" onclick="printPayslipAll()">🖨️ 全員分を印刷</button>
+      </div>
+      <div class="ps-hint">全員分は期間の支給額が0円の人を除きます。印刷時は用紙A4・縦、倍率100%で出力してください。</div>
+    </div>
+    <div id="ps-preview" class="ps-preview"></div>
+   </div>
   </div>
 
   <!-- 設定 -->
@@ -579,6 +669,7 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
 </div>
 
 <button class="fab" id="sync-fab" onclick="syncAll()">☁️</button>
+<div id="print-area"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -606,6 +697,7 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
 
 let state = JSON.parse(localStorage.getItem('farmApp') || '{"members":[],"records":[],"attendances":[],"categories":[]}');
 if (!state.wages) state.wages = [];
+if (!state.holidays) state.holidays = [];
 // 不正な出勤データを除去（test123・テストメンバーなど）
 if (state.attendances && state.attendances.length > 0) {
   state.attendances = state.attendances.filter(a => {
@@ -1059,12 +1151,27 @@ function isWeekendDate(dateStr) {
   const dow = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
   return dow === 0 || dow === 6;
 }
+// 祝日・独自休日の { 日付: 名称 }（state.holidays が変わったときだけ作り直す）
+let _holidayMapSrc = null, _holidayMap = {};
+function holidayMap() {
+  if (_holidayMapSrc !== state.holidays) {
+    _holidayMapSrc = state.holidays;
+    _holidayMap = {};
+    (state.holidays || []).forEach(h => { if (h && h.date) _holidayMap[h.date] = h.name || '祝日'; });
+  }
+  return _holidayMap;
+}
+function holidayNameOf(dateStr) { return holidayMap()[dateStr] || ''; }
+// 休日判定：土日 または 祝日・独自休日
+function isOffDay(dateStr) {
+  return isWeekendDate(dateStr) || Object.prototype.hasOwnProperty.call(holidayMap(), dateStr);
+}
 // 1セッション（出勤〜退勤）を早出/残業/所定内/休日に分ける（分単位・休憩は考慮しない生の内訳）
 // 平日: 8:30より前=早出、17:30より後=残業、その間=所定内。土日: 全て休日
 function splitSessionOvertime(dateStr, startTime, endTime) {
   const s = timeToMinutes(startTime), e = timeToMinutes(endTime);
   if (s === null || e === null || e <= s) return { early: 0, over: 0, regular: 0, holiday: 0 };
-  if (isWeekendDate(dateStr)) return { early: 0, over: 0, regular: 0, holiday: e - s };
+  if (isOffDay(dateStr)) return { early: 0, over: 0, regular: 0, holiday: e - s };
   const early = Math.max(0, Math.min(e, REGULAR_START_MIN) - s);
   // 昼休憩帯(12:00-13:00)の勤務も時給対象。集計上は「残業」に合算する
   const lunch = Math.max(0, Math.min(e, LUNCH_END_MIN) - Math.max(s, LUNCH_START_MIN));
@@ -1646,7 +1753,8 @@ function computePayroll(yyyyMM) {
     let monthRawWorked = 0; // 雇用区分によらない総実働分（月合計・丸めない。CSV「実働時間(分)」用）
 
     dates.forEach(date => {
-      const daySessions = byDate[date].slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      // 表示順は出勤時刻の早い順（'5:30' と '12:00' のようなゼロ埋めなしの時刻も正しく並べるため分換算で比較）
+      const daySessions = byDate[date].slice().sort((a, b) => (timeToMinutes(a.time) ?? 9999) - (timeToMinutes(b.time) ?? 9999));
       const md = fmtMD(date);
       let dayWorked = 0;
       let dayHasValidSession = false;
@@ -1722,7 +1830,8 @@ function computePayroll(yyyyMM) {
         workedMin: dayWorked,
         wage,
         amount: wage > 0 ? (dayWorked / 60 * wage) : 0,
-        early, over, holiday, overtimeTotal: dayOvertimeTotal
+        early, over, holiday, overtimeTotal: dayOvertimeTotal,
+        breakMin: dayBreakTotal // 明細印刷の表示用（計算には使わない）
       });
     });
 
@@ -1754,6 +1863,320 @@ function computePayroll(yyyyMM) {
   return { members: result, totalAmount: grandAmount, totalWorkedMin: grandRawMin, totalRoundedMin: grandRoundedMin };
 }
 
+// =====================================================
+// 給与明細（A4縦）印刷
+// 数値はすべて computePayroll の戻り値から取る（ここに給与の計算ロジックを書かない）
+// =====================================================
+const PAYSLIP_ISSUER = '株式会社NeoN';
+const PS_SESSION_MISSING_OUT = /〜？/g;
+const PS_SESSION_MISSING_IN = /？〜/g;
+let psFrom = '', psTo = '', psMember = '';
+let psCache = null; // { from, to, months, multiYear, list }
+
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function ymAdd(ym, delta) {
+  let [y, m] = ym.split('-').map(Number);
+  m += delta;
+  while (m < 1) { m += 12; y--; }
+  while (m > 12) { m -= 12; y++; }
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+function monthsInRange(from, to) {
+  const res = [];
+  let cur = from;
+  while (cur <= to && res.length < 36) { res.push(cur); cur = ymAdd(cur, 1); }
+  return res;
+}
+function psMonthLabel(ym, multiYear) {
+  return multiYear ? `${ym.slice(0, 4)}年${Number(ym.slice(5))}月` : `${Number(ym.slice(5))}月`;
+}
+function psPeriodText(from, to) {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  const last = new Date(ty, tm, 0).getDate();
+  return fy === ty ? `${fy}年${fm}月1日〜${tm}月${last}日` : `${fy}年${fm}月1日〜${ty}年${tm}月${last}日`;
+}
+function psJpDate(ymd) {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  return `${y}年${m}月${d}日`;
+}
+// 期間中に適用された時給（改定があれば「1,000円 → 1,200円（9/1〜）」）
+function psWageText(member, from, to) {
+  const start = `${from}-01`, end = monthEndStr(to);
+  const rows = (state.wages || []).filter(w => w.member === member && w.from && w.from <= end)
+    .sort((a, b) => a.from.localeCompare(b.from));
+  if (!rows.length) return '未設定';
+  const seq = [];
+  const base = rows.filter(w => w.from <= start);
+  if (base.length) seq.push({ from: '', wage: Number(base[base.length - 1].wage) || 0 });
+  rows.filter(w => w.from > start).forEach(w => seq.push({ from: w.from, wage: Number(w.wage) || 0 }));
+  const merged = seq.filter((x, i) => i === 0 || x.wage !== seq[i - 1].wage);
+  return merged.map(x => `${x.wage.toLocaleString()}円${x.from ? `（${fmtMD(x.from)}〜）` : ''}`).join(' → ');
+}
+
+// 対象期間の各月について computePayroll を呼び、メンバー単位にまとめる
+function buildPayslipData(from, to) {
+  const months = monthsInRange(from, to);
+  const multiYear = from.slice(0, 4) !== to.slice(0, 4);
+  const byMember = {};
+  months.forEach(ym => {
+    computePayroll(ym).members.forEach(mm => {
+      if (!byMember[mm.member]) byMember[mm.member] = [];
+      byMember[mm.member].push(Object.assign({ ym: ym }, mm));
+    });
+  });
+  const list = state.members.filter(n => byMember[n]).map(n => {
+    const ms = byMember[n];
+    const sum = key => ms.reduce((t, x) => t + (Number(x[key]) || 0), 0);
+    const employments = Array.from(new Set(ms.map(x => x.employment)));
+    const warnings = [];
+    ms.forEach(x => (x.warnings || []).forEach(w => {
+      warnings.push(/^\d+\/\d+ /.test(w) ? w : `${Number(x.ym.slice(5))}月 ${w}`);
+    }));
+    if (employments.length > 1) warnings.push('期間中に雇用区分が変わっています（表は最終月の区分で表示）');
+    const days = [];
+    ms.forEach(x => (x.days || []).forEach(d => days.push(d)));
+    days.sort((a, b) => a.date.localeCompare(b.date));
+    return {
+      member: n,
+      employment: ms[ms.length - 1].employment,
+      months: ms, days: days, warnings: warnings,
+      workDays: sum('workDays'),
+      rawWorked: sum('monthRawWorked'),
+      targetRaw: sum('workedMin'),
+      targetRounded: sum('roundedMin'),
+      early: sum('monthEarly'), over: sum('monthOver'), holiday: sum('monthHoliday'),
+      // 支給額は各月の支給額（円に四捨五入した表示額）の合計。期間全体で丸め直さない
+      amountTotal: ms.reduce((t, x) => t + Math.round(x.amount), 0)
+    };
+  });
+  return { from: from, to: to, months: months, multiYear: multiYear, list: list };
+}
+
+// 1日分の行が折り返して何段になるかの見積もり（ページ割り用・9pt基準の概算。安全側に多めに数える）
+function psRowWeight(x) {
+  const em = str => Array.from(String(str)).reduce((t, ch) => t + (ch.charCodeAt(0) < 0x2000 ? 0.55 : 1), 0);
+  const sess = String(x.sessionsText || '')
+    .replace(PS_SESSION_MISSING_OUT, '〜（退勤未記録）')
+    .replace(PS_SESSION_MISSING_IN, '（出勤未記録）〜');
+  const sessLines = Math.ceil(em(sess) / 18);  // 出勤〜退勤の列幅 ≒ 18文字分
+  const dateLines = Math.ceil((em(`${fmtMD(x.date)} ${dowLetterJP(x.date)} `) + em(holidayNameOf(x.date)) * 0.78) / 13); // 日付の列幅 ≒ 13文字分
+  return Math.max(1, sessLines, dateLines);
+}
+// 行数に応じて 標準／詰め／複数ページ を決める。本人確認欄は必ず最終ページ
+// しきい値はA4・2か月分で実測した「1枚に収まる上限」から2行ずつ余裕をとった値
+//   1枚（確認欄あり） 標準28行・詰め38行 → 26・36
+//   複数ページ 1枚目35行・中間47行・最終39行 → 33・45・37
+function payslipLayout(d, monthCount) {
+  const extra = Math.max(0, monthCount - 2); // 月別小計表が1か月増えるごとに約1行ぶん減る
+  const weightOf = arr => arr.reduce((t, x) => t + psRowWeight(x), 0);
+  const total = weightOf(d.days);
+  if (total <= 26 - extra) return { mode: 'normal', pages: [d.days] };
+  if (total <= 36 - Math.ceil(extra * 1.4)) return { mode: 'compact', pages: [d.days] };
+  const FIRST = 33 - extra, MID = 45, LAST = 37;
+  const pages = [];
+  let cur = [], used = 0, cap = FIRST;
+  d.days.forEach(x => {
+    const wgt = psRowWeight(x);
+    if (cur.length && used + wgt > cap) { pages.push(cur); cur = []; used = 0; cap = MID; }
+    cur.push(x); used += wgt;
+  });
+  if (cur.length) pages.push(cur);
+  // 最終ページには注記と本人確認欄が入る。入りきらなければ末尾の数行を次のページへ送る
+  const last = pages[pages.length - 1];
+  if (pages.length === 1 || weightOf(last) > LAST) {
+    const tail = [];
+    let tw = 0;
+    while (last.length > 1 && tw + psRowWeight(last[last.length - 1]) <= 10) {
+      const x = last.pop();
+      tw += psRowWeight(x);
+      tail.unshift(x);
+    }
+    if (!tail.length) tail.unshift(last.pop());
+    pages.push(tail);
+  }
+  return { mode: 'normal', pages: pages };
+}
+
+function payslipPagesHTML(d, data) {
+  const isFull = d.employment === '正社員';
+  const layout = payslipLayout(d, data.months.length);
+  const total = layout.pages.length;
+  const name = escHtml(d.member);
+  const yen = v => `¥${Math.round(v).toLocaleString()}`;
+  const dash = v => (v > 0 ? fmtHM(v) : '—');
+
+  const head = `<div class="ps-head"><div class="ps-title">勤務実績・給与支給明細書</div>`
+    + `<div class="ps-issuer">発行日 ${psJpDate(getTodayJST())}<br>${escHtml(PAYSLIP_ISSUER)}</div></div>`;
+  const info = `<div class="ps-info">`
+    + `<div><span class="ps-k">氏名</span><span class="ps-name">${name}</span> 様</div>`
+    + `<div><span class="ps-k">対象期間</span>${psPeriodText(data.from, data.to)}</div>`
+    + `<div><span class="ps-k">雇用区分</span>${isFull ? '正社員（時間外のみ時給計算）' : 'パート'}</div>`
+    + `<div><span class="ps-k">時給</span>${escHtml(psWageText(d.member, data.from, data.to))}</div></div>`;
+  const sum = `<div class="ps-sum">`
+    + `<div><div class="k">勤務日数</div><div class="v">${d.workDays}日</div></div>`
+    + `<div><div class="k">総実働</div><div class="v">${fmtMinutesJP(d.rawWorked)}</div></div>`
+    + `<div><div class="k">${isFull ? '時間外（丸め後）' : '支給対象時間（丸め後）'}</div><div class="v">${fmtMinutesJP(d.targetRounded)}</div></div>`
+    + `<div class="pay"><div class="k">総支給額（控除前）</div><div class="v">¥${d.amountTotal.toLocaleString()}</div></div></div>`;
+
+  const monthHead = isFull
+    ? '<tr><th>月</th><th>早出</th><th>残業</th><th>休日</th><th>時間外計 → 丸め後</th><th>支給額</th></tr>'
+    : '<tr><th>月</th><th>勤務日数</th><th>実働</th><th>丸め後</th><th>支給額</th></tr>';
+  const monthRows = d.months.map(x => isFull
+    ? `<tr><td class="c">${psMonthLabel(x.ym, data.multiYear)}</td><td class="r">${fmtHM(x.monthEarly)}</td><td class="r">${fmtHM(x.monthOver)}</td><td class="r">${fmtHM(x.monthHoliday)}</td><td class="r">${fmtHM(x.workedMin)} → ${fmtHM(x.roundedMin)}</td><td class="r">${yen(x.amount)}</td></tr>`
+    : `<tr><td class="c">${psMonthLabel(x.ym, data.multiYear)}</td><td class="r">${x.workDays}日</td><td class="r">${fmtHM(x.workedMin)}</td><td class="r">${fmtHM(x.roundedMin)}</td><td class="r">${yen(x.amount)}</td></tr>`
+  ).join('');
+  const monthTotal = isFull
+    ? `<tr class="tot"><td class="c">合計</td><td class="r">${fmtHM(d.early)}</td><td class="r">${fmtHM(d.over)}</td><td class="r">${fmtHM(d.holiday)}</td><td class="r">${fmtHM(d.targetRaw)} → ${fmtHM(d.targetRounded)}</td><td class="r">¥${d.amountTotal.toLocaleString()}</td></tr>`
+    : `<tr class="tot"><td class="c">合計</td><td class="r">${d.workDays}日</td><td class="r">${fmtHM(d.targetRaw)}</td><td class="r">${fmtHM(d.targetRounded)}</td><td class="r">¥${d.amountTotal.toLocaleString()}</td></tr>`;
+
+  const dayHead = isFull
+    ? '<tr><th class="w-date">日付</th><th class="w-sess">出勤〜退勤</th><th>実働</th><th>早出</th><th>残業</th><th>休日</th></tr>'
+    : '<tr><th class="w-date">日付</th><th class="w-sess">出勤〜退勤</th><th>休憩</th><th>実働</th></tr>';
+  const dayRow = x => {
+    const hn = holidayNameOf(x.date);
+    const dateCell = `${fmtMD(x.date)} ${dowLetterJP(x.date)}${hn ? `<span class="ps-hn">${escHtml(hn)}</span>` : ''}`;
+    const sess = escHtml(String(x.sessionsText || '—')
+      .replace(PS_SESSION_MISSING_OUT, '〜（退勤未記録）')
+      .replace(PS_SESSION_MISSING_IN, '（出勤未記録）〜'));
+    const cls = isOffDay(x.date) ? ' class="off"' : '';
+    return isFull
+      ? `<tr${cls}><td>${dateCell}</td><td>${sess}</td><td class="r">${fmtHM(x.workedMin)}</td><td class="r">${dash(x.early)}</td><td class="r">${dash(x.over)}</td><td class="r">${dash(x.holiday)}</td></tr>`
+      : `<tr${cls}><td>${dateCell}</td><td>${sess}</td><td class="r">${dash(x.breakMin || 0)}</td><td class="r">${fmtHM(x.workedMin)}</td></tr>`;
+  };
+
+  const note = isFull
+    ? '※所定8:30〜12:00・13:00〜17:30。早出・昼（12:00〜13:00）・17:30以降・土日祝の勤務が時給対象。月ごとに15分単位で切り上げて計算。月給は含みません。'
+    : '※月ごとの実働を15分単位で切り上げて計算。';
+  const sign = `<div class="ps-sign"><div class="ps-sign-lead">上記の勤務時間および支給額の内容に相違ありません。</div>`
+    + `<div class="ps-sign-row"><div class="ps-sign-date">確認日<span class="ps-line">　　　　年　　　月　　　日</span></div>`
+    + `<div class="ps-sign-name">氏名（自署）<span class="ps-line ps-line-name">&nbsp;</span></div>`
+    + `<div class="ps-seal">印</div></div></div>`;
+
+  return layout.pages.map((rows, pi) => {
+    const top = pi === 0
+      ? `${head}${info}${sum}<table class="ps-t ps-m">${monthHead}${monthRows}${monthTotal}</table><div class="ps-sec">日別勤務記録</div>`
+      : `<div class="ps-cont">勤務実績・給与支給明細書（続き）　${name} 様</div><div class="ps-sec">日別勤務記録（続き）</div>`;
+    const table = `<table class="ps-t ps-d">${dayHead}${rows.map(dayRow).join('')}</table>`;
+    const bottom = pi === total - 1 ? `<div class="ps-note">${note}</div>${sign}` : '';
+    const pno = total > 1 ? `<div class="ps-pno">${pi + 1} / ${total}</div>` : '';
+    return `<div class="ps-page ps-${layout.mode}">${top}${table}${bottom}${pno}</div>`;
+  }).join('');
+}
+
+function isPayslipViewOpen() {
+  const v = document.getElementById('payslip-view');
+  return !!v && v.style.display !== 'none';
+}
+function openPayslipView() {
+  document.getElementById('payroll-main').style.display = 'none';
+  document.getElementById('payslip-view').style.display = 'block';
+  initPayslipSelectors();
+  renderPayslipPreview();
+  window.scrollTo(0, 0);
+}
+function closePayslipView() {
+  document.getElementById('payslip-view').style.display = 'none';
+  document.getElementById('payroll-main').style.display = 'block';
+  renderPayroll();
+}
+function initPayslipSelectors() {
+  const thisMonth = getTodayJST().slice(0, 7);
+  const dates = (state.attendances || []).map(a => a.date).filter(Boolean).sort();
+  let start = dates.length && dates[0].slice(0, 7) < thisMonth ? dates[0].slice(0, 7) : thisMonth;
+  if (start < ymAdd(thisMonth, -23)) start = ymAdd(thisMonth, -23);
+  const months = monthsInRange(start, thisMonth);
+  const prev = ymAdd(thisMonth, -1);
+  if (!psFrom || months.indexOf(psFrom) < 0) psFrom = months.indexOf(prev) >= 0 ? prev : months[months.length - 1];
+  if (!psTo || months.indexOf(psTo) < 0 || psTo < psFrom) psTo = psFrom;
+  const opts = sel => months.map(ym => `<option value="${ym}"${ym === sel ? ' selected' : ''}>${ym.slice(0, 4)}年${Number(ym.slice(5))}月</option>`).join('');
+  document.getElementById('ps-from').innerHTML = opts(psFrom);
+  document.getElementById('ps-to').innerHTML = opts(psTo);
+}
+function onPayslipPeriodChange() {
+  psFrom = document.getElementById('ps-from').value;
+  psTo = document.getElementById('ps-to').value;
+  if (psFrom > psTo) { psTo = psFrom; document.getElementById('ps-to').value = psTo; }
+  if (monthsInRange(psFrom, psTo).length > 12) {
+    psFrom = ymAdd(psTo, -11);
+    document.getElementById('ps-from').value = psFrom;
+    toast('対象期間は最大12か月です');
+  }
+  renderPayslipPreview();
+}
+function renderPayslipPreview() {
+  const prev = document.getElementById('ps-preview');
+  const sel = document.getElementById('ps-member');
+  const warnEl = document.getElementById('ps-warn');
+  if (!prev || !sel || !warnEl) return;
+  if (!psFrom || !psTo) initPayslipSelectors();
+  psCache = buildPayslipData(psFrom, psTo);
+  const list = psCache.list;
+  const warns = state.holidayError ? ['祝日を取得できませんでした。土日のみで計算しています。'] : [];
+  if (!list.length) {
+    sel.innerHTML = '';
+    warnEl.innerHTML = warns.map(w => `<div>⚠️ ${escHtml(w)}</div>`).join('');
+    prev.innerHTML = '<p style="color:var(--text-hint);font-size:14px;text-align:center;padding:24px 0">この期間の勤務記録がありません</p>';
+    return;
+  }
+  if (!list.some(d => d.member === psMember)) psMember = list[0].member;
+  sel.innerHTML = list.map(d => `<option value="${escHtml(d.member)}"${d.member === psMember ? ' selected' : ''}>${escHtml(d.member)}（${d.employment}・¥${d.amountTotal.toLocaleString()}）</option>`).join('');
+  const d = list.find(x => x.member === psMember);
+  d.warnings.forEach(w => warns.push(w));
+  warnEl.innerHTML = warns.map(w => `<div>⚠️ ${escHtml(w)}</div>`).join('');
+  prev.innerHTML = payslipPagesHTML(d, psCache);
+  Array.from(prev.querySelectorAll('.ps-page')).forEach(pg => {
+    const frame = document.createElement('div');
+    frame.className = 'ps-frame';
+    pg.parentNode.insertBefore(frame, pg);
+    frame.appendChild(pg);
+  });
+  fitPayslipPreview();
+}
+// プレビューを画面幅に合わせて縮小表示（印刷には影響しない）
+function fitPayslipPreview() {
+  const prev = document.getElementById('ps-preview');
+  if (!prev || !isPayslipViewOpen()) return;
+  const avail = prev.clientWidth;
+  prev.querySelectorAll('.ps-frame').forEach(frame => {
+    const pg = frame.firstElementChild;
+    const s = Math.min(1, avail / pg.offsetWidth);
+    pg.style.transform = `scale(${s})`;
+    frame.style.width = `${pg.offsetWidth * s}px`;
+    frame.style.height = `${pg.offsetHeight * s}px`;
+  });
+}
+window.addEventListener('resize', () => { if (isPayslipViewOpen()) fitPayslipPreview(); });
+
+function printPayslipHTML(html) {
+  document.getElementById('print-area').innerHTML = html;
+  setTimeout(() => window.print(), 50);
+}
+window.addEventListener('afterprint', () => {
+  const area = document.getElementById('print-area');
+  if (area) area.innerHTML = '';
+});
+function printPayslipOne() {
+  if (!psCache || !psCache.list.length) { toast('この期間の勤務記録がありません'); return; }
+  const d = psCache.list.find(x => x.member === psMember);
+  if (!d) return;
+  const warns = (state.holidayError ? ['祝日を取得できませんでした（土日のみで計算）'] : []).concat(d.warnings);
+  if (warns.length && !confirm('警告があります。このまま印刷しますか？\n\n' + warns.join('\n'))) return;
+  printPayslipHTML(payslipPagesHTML(d, psCache));
+}
+function printPayslipAll() {
+  if (!psCache || !psCache.list.length) { toast('この期間の勤務記録がありません'); return; }
+  const list = psCache.list.filter(d => d.amountTotal > 0);
+  if (!list.length) { toast('支給額のある人がいません'); return; }
+  const lines = [];
+  if (state.holidayError) lines.push('・祝日を取得できませんでした（土日のみで計算）');
+  list.filter(d => d.warnings.length).forEach(d => lines.push(`・${d.member}（警告${d.warnings.length}件）`));
+  if (lines.length && !confirm('警告があります。このまま印刷しますか？\n\n' + lines.join('\n'))) return;
+  printPayslipHTML(list.map(d => payslipPagesHTML(d, psCache)).join(''));
+}
+
 function payrollMove(delta) {
   const [y, m] = payrollMonth.split('-').map(Number);
   let ny = y, nm = m + delta;
@@ -1781,6 +2204,10 @@ function renderPayroll() {
   const lastDay = new Date(y, m, 0).getDate();
   const pay = nextMonthLastDay(y, m);
   subEl.textContent = `${m}/1〜${m}/${lastDay} ・ 支払 ${pay.m}月${pay.d}日`;
+
+  const holWarnEl = document.getElementById('payroll-holiday-warn');
+  if (holWarnEl) holWarnEl.textContent = state.holidayError ? '⚠️ 祝日を取得できませんでした。土日のみで計算しています。' : '';
+  if (isPayslipViewOpen()) renderPayslipPreview();
 
   const data = computePayroll(payrollMonth);
   totalEl.textContent = `¥${Math.round(data.totalAmount).toLocaleString()}`;
@@ -1817,15 +2244,15 @@ function renderPayroll() {
         <div class="payroll-break-box"><div class="payroll-break-label">残業</div><div class="payroll-break-val">${fmtHM(mem.monthOver)}</div></div>
         <div class="payroll-break-box"><div class="payroll-break-label">休日</div><div class="payroll-break-val">${fmtHM(mem.monthHoliday)}</div></div>
       </div>
-      <div class="payroll-note">月給は含みません。8:30〜17:30の平日勤務は対象外です</div>
+      <div class="payroll-note">月給は含みません。所定（平日8:30〜12:00・13:00〜17:30）の勤務は対象外です</div>
     ` : '';
 
     // 日別内訳：パートは現行のまま（日付／出勤〜退勤／実働／時給／金額）
     // 正社員は列構成を変更（日付＋曜日／出勤〜退勤／早出／残業／休日）・土日は背景色・最下部に合計行
     const detailRows = isFull
       ? mem.days.map(d => `
-        <div class="payroll-day-row${isWeekendDate(d.date) ? ' weekend' : ''}">
-          <div class="payroll-day-line1"><span>${fmtMD(d.date)} ${dowLetterJP(d.date)}</span><span>${d.sessionsText}</span></div>
+        <div class="payroll-day-row${isOffDay(d.date) ? ' weekend' : ''}">
+          <div class="payroll-day-line1"><span>${fmtMD(d.date)} ${dowLetterJP(d.date)}${holidayNameOf(d.date) ? ' ' + holidayNameOf(d.date) : ''}</span><span>${d.sessionsText}</span></div>
           <div class="payroll-day-line2"><span>早出 ${d.early > 0 ? fmtHM(d.early) : '—'}</span><span>残業 ${d.over > 0 ? fmtHM(d.over) : '—'}</span><span>休日 ${d.holiday > 0 ? fmtHM(d.holiday) : '—'}</span></div>
         </div>
       `).join('') + `
@@ -2082,6 +2509,9 @@ async function syncAll(silent) {
     }
     // 時給マスタ（クラウド＝正・完全上書き。シートが無ければ空配列で返る）
     state.wages = data.wages || [];
+    // 祝日（Googleの祝日カレンダー＋休日シート）。フィールドが無い＝GAS未更新も取得失敗として扱う
+    state.holidays = Array.isArray(data.holidays) ? data.holidays : [];
+    state.holidayError = !Array.isArray(data.holidays) || !!data.holidayError;
     save();
     if (!silent) { toast('☁️ 同期完了'); setStatus('同期済み ✓', 'ok'); }
     refreshCurrentPage();
