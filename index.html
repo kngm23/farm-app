@@ -321,7 +321,7 @@ body.not-admin .nav-btn[data-page="payroll"] { display:none }
 .ps-info{display:grid;grid-template-columns:1fr 1fr;gap:1.2mm 6mm;margin:3.5mm 0;font-size:12.5pt}
 .ps-k{color:#555;font-size:10.5pt;margin-right:2.5mm}
 .ps-name{font-size:17pt;font-weight:700}
-.ps-sum{display:grid;grid-template-columns:repeat(4,1fr);border:0.5pt solid #888;margin-bottom:3.5mm}
+.ps-sum{display:grid;grid-template-columns:0.7fr 1fr 1.35fr 1fr;border:0.5pt solid #888;margin-bottom:3.5mm}
 .ps-sum>div{padding:2mm 3mm;border-right:0.5pt solid #888}
 .ps-sum>div:last-child{border-right:none}
 .ps-sum .k{font-size:10.5pt;color:#555}
@@ -2018,12 +2018,12 @@ function payslipPagesHTML(d, data) {
   const sum = `<div class="ps-sum">`
     + `<div><div class="k">勤務日数</div><div class="v">${d.workDays}日</div></div>`
     + `<div><div class="k">総実働</div><div class="v">${fmtMinutesJP(d.rawWorked)}</div></div>`
-    + `<div><div class="k">${isFull ? '時間外（丸め後）' : '支給対象（丸め後）'}</div><div class="v">${fmtMinutesJP(d.targetRounded)}</div></div>`
+    + `<div><div class="k">${isFull ? '時間外（15分切上げ）' : '支給対象時間（15分切上げ）'}</div><div class="v">${fmtMinutesJP(d.targetRounded)}</div></div>`
     + `<div class="pay"><div class="k">総支給額（控除前）</div><div class="v">¥${d.amountTotal.toLocaleString()}</div></div></div>`;
 
   const monthHead = isFull
-    ? '<tr><th>月</th><th>早出</th><th>残業</th><th>休日</th><th>時間外計 → 丸め後</th><th>支給額</th></tr>'
-    : '<tr><th>月</th><th>勤務日数</th><th>実働</th><th>丸め後</th><th>支給額</th></tr>';
+    ? '<tr><th>月</th><th>早出</th><th>残業</th><th>休日</th><th>時間外計 → 15分切上げ後</th><th>支給額</th></tr>'
+    : '<tr><th>月</th><th>勤務日数</th><th>実働</th><th>15分切上げ後</th><th>支給額</th></tr>';
   const monthRows = d.months.map(x => isFull
     ? `<tr><td class="c">${psMonthLabel(x.ym, data.multiYear)}</td><td class="r">${fmtHM(x.monthEarly)}</td><td class="r">${fmtHM(x.monthOver)}</td><td class="r">${fmtHM(x.monthHoliday)}</td><td class="r">${fmtHM(x.workedMin)} → ${fmtHM(x.roundedMin)}</td><td class="r">${yen(x.amount)}</td></tr>`
     : `<tr><td class="c">${psMonthLabel(x.ym, data.multiYear)}</td><td class="r">${x.workDays}日</td><td class="r">${fmtHM(x.workedMin)}</td><td class="r">${fmtHM(x.roundedMin)}</td><td class="r">${yen(x.amount)}</td></tr>`
@@ -2287,7 +2287,7 @@ function renderPayroll() {
 function exportPayrollCSV() {
   const data = computePayroll(payrollMonth);
   if (!data.members.length) { toast('⚠️ この月の給与データがありません'); return; }
-  const h = 'メンバー名,雇用区分,勤務日数,実働時間(分),早出(分),残業(分),休日(分),時間外合計(分),丸め後(分),時給,支給額,警告';
+  const h = 'メンバー名,雇用区分,勤務日数,実働時間(分),早出(分),残業(分),休日(分),時間外合計(分),切上げ後(分),時給,支給額,警告';
   const rows = data.members.map(mem => {
     const isFull = mem.employment === '正社員';
     const wageAtEnd = resolveWage(mem.member, monthEndStr(payrollMonth), state.wages || []);
